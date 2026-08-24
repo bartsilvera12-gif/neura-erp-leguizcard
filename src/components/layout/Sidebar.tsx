@@ -35,6 +35,7 @@ import {
   Truck,
   // Inbox, // usado por el ítem "Recepción" (oculto)
   ReceiptText,
+  Car,
 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
@@ -132,6 +133,9 @@ const MENU_STRUCTURE: MenuItem[] = [
     key: "notas_credito", slug: "notas_credito", label: "Notas de crédito",
     href: "/notas-credito", icon: ScrollText,
   },
+  // Vehiculos: autos de los clientes. El historial de servicios del lubricentro
+  // cuelga de cada vehiculo, no del cliente.
+  { key: "vehiculos", slug: "vehiculos", label: "Vehículos", href: "/vehiculos", icon: Car },
   // Recetas: composicion y costeo de un producto a partir de sus insumos.
   // Es la base para modelar los servicios del lubricentro (mano de obra + insumos).
   { key: "recetas", slug: "recetas", label: "Recetas", href: "/dashboard/recetas", icon: ChefHat },
@@ -176,7 +180,7 @@ const MENU_STRUCTURE: MenuItem[] = [
  */
 const MENU_FAMILIES: { id: string; titulo: string; keys: string[] }[] = [
   { id: "inicio", titulo: "Inicio", keys: ["dashboard"] },
-  { id: "comercial", titulo: "Comercial", keys: ["clientes", "gestion-clientes", "ventas", "presupuestos"] },
+  { id: "comercial", titulo: "Comercial", keys: ["clientes", "vehiculos", "gestion-clientes", "ventas", "presupuestos"] },
   { id: "finanzas", titulo: "Finanzas", keys: ["cobros", "pagos", "recibos", "gastos", "notas_credito", "comisiones", "reportes"] },
   { id: "operaciones", titulo: "Operaciones", keys: ["inventario", "compras", "remision", "recetas"] },
   { id: "omnicanal", titulo: "Omnicanal", keys: ["conversaciones"] },

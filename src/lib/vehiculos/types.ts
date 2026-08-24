@@ -1,0 +1,86 @@
+/**
+ * Vehiculos del cliente — base del seguimiento del lubricentro.
+ *
+ * Un lubricentro atiende AUTOS, no clientes: el historial de servicios y el
+ * aviso de proximo cambio cuelgan del vehiculo. Un cliente puede tener varios.
+ *
+ * La patente es el identificador operativo y es unica por empresa, comparada de
+ * forma normalizada (sin mayusculas/minusculas, espacios ni guiones) para que
+ * "ABC 123" y "abc-123" no entren dos veces.
+ */
+
+export const COMBUSTIBLES = ["nafta", "diesel", "gnv", "electrico", "hibrido", "otro"] as const;
+export type Combustible = (typeof COMBUSTIBLES)[number];
+
+export const COMBUSTIBLE_LABEL: Record<Combustible, string> = {
+  nafta: "Nafta",
+  diesel: "Diésel",
+  gnv: "GNV",
+  electrico: "Eléctrico",
+  hibrido: "Híbrido",
+  otro: "Otro",
+};
+
+export interface Vehiculo {
+  id: string;
+  empresa_id: string;
+  cliente_id: string | null;
+  /** Nombre del cliente, resuelto por join. Solo lectura. */
+  cliente_nombre: string | null;
+  patente: string;
+  marca: string | null;
+  modelo: string | null;
+  anio: number | null;
+  motor: string | null;
+  combustible: Combustible | null;
+  vin: string | null;
+  color: string | null;
+  km_actual: number | null;
+  km_actualizado_at: string | null;
+  observaciones: string | null;
+  activo: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NuevoVehiculoInput {
+  cliente_id?: string | null;
+  patente: string;
+  marca?: string | null;
+  modelo?: string | null;
+  anio?: number | null;
+  motor?: string | null;
+  combustible?: Combustible | null;
+  vin?: string | null;
+  color?: string | null;
+  km_actual?: number | null;
+  observaciones?: string | null;
+  activo?: boolean;
+}
+
+/** Una atencion del vehiculo: la venta que la registro. */
+export interface ServicioVehiculo {
+  venta_id: string;
+  numero_control: string;
+  fecha: string;
+  estado: string;
+  total: number;
+  km_registrado: number | null;
+  /** Nombres de los items de la venta, para leer de un vistazo que se le hizo. */
+  detalle: string[];
+}
+
+/**
+ * Normaliza una patente para comparar: mayusculas y sin nada que no sea
+ * alfanumerico. Debe coincidir con el indice unico de la tabla
+ * (`ux_vehiculos_empresa_patente`).
+ */
+export function normalizarPatente(patente: string): string {
+  return patente.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+/** Formato de presentacion: se conserva tal cual la cargo el usuario. */
+export function formatVehiculo(v: Pick<Vehiculo, "patente" | "marca" | "modelo">): string {
+  const desc = [v.marca, v.modelo].filter(Boolean).join(" ");
+  return desc ? `${v.patente} — ${desc}` : v.patente;
+}

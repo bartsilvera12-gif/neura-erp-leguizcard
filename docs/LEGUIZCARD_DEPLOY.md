@@ -50,6 +50,7 @@ Luego, en orden (todos idempotentes):
 | `supabase/leguizcard/provision/0003_grant_anon_like_source.sql` | Grants del rol `anon` (el clonador solo cubre `authenticated` y `service_role`). |
 | `supabase/leguizcard/provision/0004_usuario_administrador.sql` | Vincula el usuario de Supabase Auth con la empresa Leguizcard. |
 | `supabase/leguizcard/provision/0005_empresa_modulos_seleccion.sql` | Acota los módulos habilitados al alcance acordado. |
+| `supabase/leguizcard/provision/0006_productos_marca.sql` | Agrega `productos.marca` (la usa el reporte de stock mínimo). |
 
 Aplicar un `.sql` con el helper del repo:
 
@@ -148,6 +149,32 @@ denominaciones, rechazo del segundo turno activo sobre el mismo `numero_caja` (4
 índice unique parcial), movimientos de ingreso/egreso, paso a `en_cierre`, cierre con
 arqueo y diferencia, y reapertura del número tras el cierre. Todo limpiado por id.
 
+## 6.b Reportes, Cobranzas y Recetas (portados)
+
+Del mismo repo origen se portaron tres módulos más, todos sin migraciones salvo
+`productos.marca`:
+
+- **Reportes** — hub en `/reportes` con 17 reportes: estado de cuenta, ventas,
+  ventas-detalle, productos vendidos, compras, panel de compras, proveedores,
+  conciliación, créditos por cliente, facturas, variación de precios, arqueos de caja,
+  **stock mínimo**, **proyección de inventario** y **rotación ABC**. Con export a Excel
+  y PDF donde el origen los tenía.
+- **Cobranzas** — `/cobros`, cuentas por cobrar y registro de cobros contra entidades
+  bancarias. Antes `cobros` era un módulo habilitado sin API ni página.
+- **Recetas** — `/dashboard/recetas`: composición y costeo de un producto a partir de sus
+  insumos, con conversión de unidades y merma. Es la base natural para modelar los
+  servicios del lubricentro (mano de obra + insumos consumidos).
+
+Referencias al cliente origen que se limpiaron al portar:
+`extracto-pdf.ts` cargaba `ferreteriarepublica-doc-logo.png`; las páginas de recetas
+ataban un feature flag a `NEURA_CLIENT_SCHEMA === "reservacaacupe"`; y tres cabeceras
+nombraban el schema ajeno. Las migraciones SQL del origen no se copiaron (hardcodean
+`enlodemari` / `reservacaacupe`).
+
+Validación: se ejecutó contra `leguizcard` el SQL de los reportes nuevos (stock mínimo,
+rotación ABC, proyección, estado de cuenta, cobros, ventas-detalle, compras, recetas y
+`fn_receta_costeo()`); todas corren.
+
 ## 7. Módulos
 
 `0001` habilita el catálogo completo (31) como baseline; `0005` lo acota al alcance
@@ -159,11 +186,10 @@ más `crm`, `marketing`, `marketing_ops` y `proyectos`.
 > `resolveEffectiveModules` hace fallback a "ERP completo" si no hay ninguna fila activa:
 > siempre debe quedar al menos un módulo activo. `0005` aborta si el resultado sería 0.
 
-**Módulos sin UI.** `cobros`, `recetas` y `reportes` están activos en `empresa_modulos`
-pero no tienen página propia en el código (`reportes` solo sirve hoy `/reportes/cajas`).
-`comisiones`, `pagos` y `planes` sí tienen página (`/comisiones`, `/pagos`, `/planes`) pero
-**no** figuran en `Sidebar.tsx`, así que no aparecen en el menú aunque el módulo esté
-habilitado.
+**Módulos sin UI.** Ya no quedan fantasmas: `cobros`, `recetas` y `reportes` tienen
+página y entrada de menú. `comisiones` y `pagos` también se agregaron al sidebar.
+El único que sigue habilitado sin entrada propia es `planes` (`/planes` existe y es
+accesible por URL).
 
 ## 8. Branding pendiente
 

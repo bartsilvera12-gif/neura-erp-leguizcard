@@ -132,11 +132,27 @@ const MENU_STRUCTURE: MenuItem[] = [
     key: "notas_credito", slug: "notas_credito", label: "Notas de crédito",
     href: "/notas-credito", icon: ScrollText,
   },
-  // Reportes: hoy solo arqueos de caja. El panel del turno vive dentro de /ventas.
+  // Recetas: composicion y costeo de un producto a partir de sus insumos.
+  // Es la base para modelar los servicios del lubricentro (mano de obra + insumos).
+  { key: "recetas", slug: "recetas", label: "Recetas", href: "/dashboard/recetas", icon: ChefHat },
+  // Cobranzas: cuentas por cobrar y registro de cobros.
+  { key: "cobros", slug: "cobros", label: "Cobranzas", href: "/cobros", icon: Banknote },
+  // Comisiones de vendedores (politicas, periodos y liquidacion).
+  { key: "comisiones", slug: "comisiones", label: "Comisiones", href: "/comisiones", icon: Percent },
+  // Pagos recibidos de clientes.
+  { key: "pagos", slug: "pagos", label: "Pagos", href: "/pagos", icon: Wallet },
+  // Reportes: hub con toda la reporteria. El panel del turno de caja vive
+  // dentro de /ventas; sus arqueos se consultan en /reportes/cajas.
   {
     key: "reportes", slug: "reportes", label: "Reportes",
-    href: "/reportes/cajas", icon: BarChart3,
-    children: [{ label: "Arqueos de caja", href: "/reportes/cajas" }],
+    href: "/reportes", icon: BarChart3,
+    children: [
+      { label: "Ver todos", href: "/reportes", exactMatch: true },
+      { label: "Arqueos de caja", href: "/reportes/cajas" },
+      { label: "Stock mínimo", href: "/reportes/stock-minimo" },
+      { label: "Proyección de inventario", href: "/reportes/proyeccion-inventario" },
+      { label: "Rotación ABC", href: "/reportes/rotacion-abc" },
+    ],
   },
   // Sistema: el acceso lo decide empresa_modulos; si el módulo no está habilitado, no se muestra.
   { key: "usuarios", slug: "usuarios", label: "Usuarios", href: "/usuarios", icon: UserCog },
@@ -161,8 +177,8 @@ const MENU_STRUCTURE: MenuItem[] = [
 const MENU_FAMILIES: { id: string; titulo: string; keys: string[] }[] = [
   { id: "inicio", titulo: "Inicio", keys: ["dashboard"] },
   { id: "comercial", titulo: "Comercial", keys: ["clientes", "gestion-clientes", "ventas", "presupuestos"] },
-  { id: "finanzas", titulo: "Finanzas", keys: ["recibos", "gastos", "notas_credito", "reportes"] },
-  { id: "operaciones", titulo: "Operaciones", keys: ["inventario", "compras", "remision"] },
+  { id: "finanzas", titulo: "Finanzas", keys: ["cobros", "pagos", "recibos", "gastos", "notas_credito", "comisiones", "reportes"] },
+  { id: "operaciones", titulo: "Operaciones", keys: ["inventario", "compras", "remision", "recetas"] },
   { id: "omnicanal", titulo: "Omnicanal", keys: ["conversaciones"] },
   { id: "administracion", titulo: "Administración", keys: ["usuarios", "configuracion"] },
 ];

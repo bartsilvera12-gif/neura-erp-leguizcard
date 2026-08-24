@@ -51,6 +51,8 @@ Luego, en orden (todos idempotentes):
 | `supabase/leguizcard/provision/0004_usuario_administrador.sql` | Vincula el usuario de Supabase Auth con la empresa Leguizcard. |
 | `supabase/leguizcard/provision/0005_empresa_modulos_seleccion.sql` | Acota los módulos habilitados al alcance acordado. |
 | `supabase/leguizcard/provision/0006_productos_marca.sql` | Agrega `productos.marca` (la usa el reporte de stock mínimo). |
+| `supabase/leguizcard/provision/0007_vehiculos.sql` | Tabla `vehiculos` + `ventas.vehiculo_id` / `ventas.km_registrado`, con RLS. |
+| `supabase/leguizcard/provision/0008_modulo_vehiculos.sql` | Alta del módulo `vehiculos` en el catálogo y habilitación. |
 
 Aplicar un `.sql` con el helper del repo:
 
@@ -174,6 +176,38 @@ nombraban el schema ajeno. Las migraciones SQL del origen no se copiaron (hardco
 Validación: se ejecutó contra `leguizcard` el SQL de los reportes nuevos (stock mínimo,
 rotación ABC, proyección, estado de cuenta, cobros, ventas-detalle, compras, recetas y
 `fn_receta_costeo()`); todas corren.
+
+## 6.c Lubricentro: vehículos y servicios
+
+Un lubricentro atiende **autos**, no clientes: el historial y los avisos de próximo
+cambio cuelgan del vehículo, y un cliente puede tener varios.
+
+**Vehículos** (`0007`). Tabla `leguizcard.vehiculos` con patente única por empresa,
+comparada **normalizada** (mayúsculas, sin caracteres no alfanuméricos) mediante un índice
+único de expresión: `ABC 123` y `abc-123` son el mismo auto. Trae marca, modelo, año,
+motor, combustible, VIN, color, kilometraje y observaciones. RLS con el mismo patrón del
+schema (`puede_acceder_empresa`), 4 policies, grants para los 4 roles, trigger de
+`updated_at` y CHECKs de año, km y combustible.
+
+`ventas` suma `vehiculo_id` y `km_registrado`, ambas nullable — las ventas de mostrador no
+las usan.
+
+**Servicios: no son una entidad nueva.** Un servicio es un `productos` con
+`tipo_producto = 'servicio'` (el CHECK del baseline ya lo permitía) y su **receta** lista
+los insumos que consume (aceite, filtro, mano de obra). Así se vende con el flujo de ventas
+actual sin tocarlo, descuenta stock de los insumos, y el costeo y la rentabilidad salen de
+`fn_receta_costeo()`, que ya existe.
+
+**App.** API REST completa en `/api/vehiculos` (listado con filtros por cliente y estado,
+alta con detección previa de patente duplicada → 409 legible en vez del 23505, edición
+parcial, baja lógica) y tres pantallas: listado con buscador, alta, y ficha con historial de
+servicios y registro de kilometraje. El odómetro no retrocede: se avisa en vez de pisar el
+dato. La baja es lógica porque las ventas históricas referencian el vehículo.
+
+Verificado a nivel base con RLS activo bajo el JWT del admin: unicidad normalizada de
+patente en sus tres escrituras, los cuatro CHECKs, el rechazo de un INSERT con el
+`empresa_id` de Instemaq, el enganche venta↔vehículo con km, la consulta de historial y el
+trigger de `updated_at`.
 
 ## 7. Módulos
 

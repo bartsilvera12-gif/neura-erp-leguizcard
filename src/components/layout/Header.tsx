@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Bell, ChevronDown, LogOut, Menu } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
@@ -120,19 +119,15 @@ export default function Header() {
             onClick={() => setUserMenuOpen(!userMenuOpen)}
             className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 shadow-sm transition-all hover:border-[#4FAEB2]/60"
           >
-            {/* Avatar: logo de la empresa (Leguizcard); la inicial queda de respaldo. */}
+            {/* Avatar: inicial del usuario. Leguizcard todavia no tiene logo propio;
+                cuando lo tenga, se puede volver a un <Image> aca. */}
             <div
-              className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white"
+              className="flex h-9 w-9 shrink-0 select-none items-center justify-center overflow-hidden rounded-full bg-[#4FAEB2] text-sm font-bold leading-none text-white"
               style={{ boxShadow: "0 0 0 3px rgba(79, 174, 178, 0.25)" }}
+              title={displayName}
+              aria-hidden="true"
             >
-              <Image
-                src="/brand/leguizcard-logo.png"
-                alt="Leguizcard"
-                width={72}
-                height={72}
-                className="h-full w-full object-cover"
-                title={avatarInitial}
-              />
+              {avatarInitial}
             </div>
             <div className="hidden text-left sm:block">
               <p className="max-w-[180px] truncate text-sm font-semibold text-slate-900">{displayName}</p>

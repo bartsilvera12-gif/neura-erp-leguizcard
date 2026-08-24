@@ -112,13 +112,14 @@ function formatMonto(nStr: string, moneda: string): string {
 }
 
 /**
- * Logo por defecto del KuDE. Primero el de la instancia (Leguizcard); si no está,
- * se preserva el logo Neura del bundle.
+ * Logo por defecto del KuDE: solo el de la instancia. Si no existe, se devuelve
+ * null y el header se renderiza sin logo. No se cae al logo de la plataforma
+ * para no imprimir branding ajeno en documentos fiscales del cliente.
  */
 function readLogoBytes(): Uint8Array | null {
   const candidatos = [
     path.join(process.cwd(), "public", "brand", "leguizcard-logo.png"),
-    path.join(process.cwd(), "public", "logo-neura.png"),
+    path.join(process.cwd(), "public", "brand", "leguizcard-logo.jpeg"),
   ];
   for (const p of candidatos) {
     try {
@@ -266,8 +267,8 @@ export async function buildKudePdfBuffer(input: BuildKudePdfInput): Promise<Buff
 
   /**
    * Branding resolution: si la empresa configuró color/logo válidos, los usamos;
-   * si no, se preservan exactamente NEURA_BLUE / NEURA_BLUE_FILL / logo-neura.png
-   * (cero cambios visuales para empresas sin branding).
+   * si no, se preservan los colores por defecto (NEURA_BLUE / NEURA_BLUE_FILL) y
+   * el KuDE se emite sin logo.
    */
   const primaryConfig = parseHexColorToRgb(branding?.colorPrimario ?? null);
   const primary: RGB = primaryConfig ?? NEURA_BLUE;
@@ -314,8 +315,9 @@ export async function buildKudePdfBuffer(input: BuildKudePdfInput): Promise<Buff
   /**
    * Preferencia de logo:
    *   1) Branding por empresa (PNG bytes ya descargado por el endpoint).
-   *   2) Logo Neura del bundle (`public/logo-neura.png`).
-   * Si ambos fallan, header se renderiza sin logo (igual que hoy).
+   *   2) Logo de la instancia en `public/brand/` (hoy no existe: Leguizcard aún
+   *      no entregó su logo).
+   * Si ambos fallan, el header se renderiza sin logo.
    */
   const brandingLogo = branding?.logoBytes ?? null;
   const fallbackLogo = readLogoBytes();

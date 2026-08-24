@@ -11,8 +11,12 @@ export const EMPRESA_DOC = {
   telefono: "",
   email: "",
   direccion: [] as string[],
-  /** Logo del cliente. Servido desde /public. */
-  logoUrl: "/brand/leguizcard-logo.png",
+  /**
+   * Logo del cliente, servido desde /public. Vacio = documentos sin logo.
+   * Leguizcard todavia no entrego su logo; no se usa el de la plataforma para
+   * no imprimir branding ajeno en sus documentos.
+   */
+  logoUrl: "",
 };
 
 function esc(v: unknown): string {
@@ -29,7 +33,10 @@ function esc(v: unknown): string {
  */
 export function membreteA4(origin = ""): string {
   const e = EMPRESA_DOC;
-  const logo = origin ? `${origin}${e.logoUrl}` : e.logoUrl;
+  const logo = e.logoUrl ? (origin ? `${origin}${e.logoUrl}` : e.logoUrl) : "";
+  const logoHtml = logo
+    ? `<img src="${esc(logo)}" alt="${esc(e.nombre)}" style="max-width:240px;max-height:130px;width:auto;height:auto;object-fit:contain;display:block;" />`
+    : `<div style="font-size:20px;font-weight:800;color:#1e3a8a;letter-spacing:0.04em;">${esc(e.nombre)}</div>`;
   const actividadHtml = e.actividad.length
     ? e.actividad.map((a) => `<div style="color:#6b7280;">${esc(a)}</div>`).join("")
     : "";
@@ -39,7 +46,7 @@ export function membreteA4(origin = ""): string {
   return `
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:18px;border-bottom:2px solid #1e3a8a;padding-bottom:12px;margin-bottom:16px;">
     <div style="flex:0 0 auto;">
-      <img src="${esc(logo)}" alt="${esc(e.nombre)}" style="max-width:240px;max-height:130px;width:auto;height:auto;object-fit:contain;display:block;" />
+      ${logoHtml}
     </div>
     <div style="flex:1;min-width:0;text-align:right;font-size:11px;color:#374151;line-height:1.55;">
       <div style="font-size:14px;font-weight:800;color:#1f2937;">${esc(e.nombre)}</div>
@@ -56,7 +63,10 @@ export function membreteA4(origin = ""): string {
  */
 export function membreteTicket(origin = ""): string {
   const e = EMPRESA_DOC;
-  const logo = origin ? `${origin}${e.logoUrl}` : e.logoUrl;
+  const logo = e.logoUrl ? (origin ? `${origin}${e.logoUrl}` : e.logoUrl) : "";
+  const logoHtml = logo
+    ? `<img src="${esc(logo)}" alt="${esc(e.nombre)}" style="max-width:210px;max-height:110px;width:auto;height:auto;object-fit:contain;display:inline-block;margin:0 auto 4px;" />`
+    : "";
   const telHtml = e.telefono ? `<div style="font-size:10px;">Tel: ${esc(e.telefono)}</div>` : "";
   const emailHtml = e.email ? `<div style="font-size:10px;word-break:break-all;">${esc(e.email)}</div>` : "";
   const dirHtml = e.direccion.length
@@ -64,7 +74,7 @@ export function membreteTicket(origin = ""): string {
     : "";
   return `
   <div style="text-align:center;padding-bottom:6px;margin-bottom:6px;border-bottom:1px dashed #000;">
-    <img src="${esc(logo)}" alt="${esc(e.nombre)}" style="max-width:210px;max-height:110px;width:auto;height:auto;object-fit:contain;display:inline-block;margin:0 auto 4px;" />
+    ${logoHtml}
     <div style="font-weight:700;font-size:12px;">${esc(e.nombre)}</div>
     ${dirHtml}
     ${telHtml}

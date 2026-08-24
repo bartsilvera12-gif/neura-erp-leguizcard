@@ -135,7 +135,13 @@ const MENU_STRUCTURE: MenuItem[] = [
   },
   // Vehiculos: autos de los clientes. El historial de servicios del lubricentro
   // cuelga de cada vehiculo, no del cliente.
-  { key: "vehiculos", slug: "vehiculos", label: "Vehículos", href: "/vehiculos", icon: Car },
+  {
+    key: "vehiculos", slug: "vehiculos", label: "Vehículos", href: "/vehiculos", icon: Car,
+    children: [
+      { label: "Todos", href: "/vehiculos", exactMatch: true },
+      { label: "Próximos servicios", href: "/vehiculos/proximos-servicios" },
+    ],
+  },
   // Recetas: composicion y costeo de un producto a partir de sus insumos.
   // Es la base para modelar los servicios del lubricentro (mano de obra + insumos).
   { key: "recetas", slug: "recetas", label: "Recetas", href: "/dashboard/recetas", icon: ChefHat },

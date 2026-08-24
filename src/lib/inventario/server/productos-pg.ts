@@ -120,6 +120,9 @@ export interface InsertProductoInput {
   cantidad_minima_mayorista?: number | null;
   precio_distribuidor?: number | null;
   tipo_producto?: string;
+  /** Solo servicios: cada cuanto se repite el mantenimiento. */
+  servicio_intervalo_km?: number | null;
+  servicio_intervalo_meses?: number | null;
 }
 
 const RETURNING = `
@@ -130,7 +133,7 @@ const RETURNING = `
   es_vendible, es_insumo,
   controla_stock, valorizado, unidad_compra, unidad_receta, factor_compra_receta, tiempo_prep_minutos,
   precio_mayorista, cantidad_minima_mayorista, precio_distribuidor, modo_receta,
-  tipo_producto
+  tipo_producto, marca, servicio_intervalo_km, servicio_intervalo_meses
 `;
 
 // ─── Operaciones ──────────────────────────────────────────────────────────
@@ -149,7 +152,8 @@ export async function insertProducto(
       categoria_principal_id, ubicacion_principal_id, proveedor_principal_id,
       es_vendible, es_insumo,
       controla_stock, valorizado, unidad_compra, unidad_receta, factor_compra_receta, tiempo_prep_minutos,
-      precio_mayorista, cantidad_minima_mayorista, precio_distribuidor, tipo_producto
+      precio_mayorista, cantidad_minima_mayorista, precio_distribuidor, tipo_producto,
+      servicio_intervalo_km, servicio_intervalo_meses
     ) VALUES (
       $1::uuid, $2, $3, $4::numeric, $5::numeric, $6::numeric, $7::numeric,
       $8, $9, $10, COALESCE($11::boolean, false),
@@ -157,7 +161,8 @@ export async function insertProducto(
       COALESCE($15::boolean, true), COALESCE($16::boolean, false),
       COALESCE($17::boolean, true), COALESCE($18::boolean, true),
       $19, $20, COALESCE($21::numeric, 1), COALESCE($22::int, 0),
-      $23::numeric, $24::numeric, $25::numeric, COALESCE($26, 'reventa')
+      $23::numeric, $24::numeric, $25::numeric, COALESCE($26, 'reventa'),
+      $27::numeric, $28::smallint
     )
     RETURNING ${RETURNING}
   `;
@@ -188,6 +193,8 @@ export async function insertProducto(
     d.cantidad_minima_mayorista ?? null,
     d.precio_distribuidor ?? null,
     d.tipo_producto ?? "reventa",
+    d.servicio_intervalo_km ?? null,
+    d.servicio_intervalo_meses ?? null,
   ];
   try {
     const { rows } = await pool().query<ProductoRow>(sql, params);
@@ -226,6 +233,8 @@ export interface UpdateProductoInput {
   precio_distribuidor?: number | null;
   tipo_producto?: string;
   modo_receta?: string;
+  servicio_intervalo_km?: number | null;
+  servicio_intervalo_meses?: number | null;
 }
 
 /** Update parcial. Devuelve la fila o null si no existe / no pertenece a la empresa. */
@@ -280,6 +289,8 @@ export async function updateProductoPg(
   if (patch.cantidad_minima_mayorista !== undefined) add("cantidad_minima_mayorista", patch.cantidad_minima_mayorista, "::numeric");
   if (patch.precio_distribuidor !== undefined) add("precio_distribuidor", patch.precio_distribuidor, "::numeric");
   if (patch.tipo_producto !== undefined) add("tipo_producto", patch.tipo_producto);
+  if (patch.servicio_intervalo_km !== undefined) add("servicio_intervalo_km", patch.servicio_intervalo_km);
+  if (patch.servicio_intervalo_meses !== undefined) add("servicio_intervalo_meses", patch.servicio_intervalo_meses);
   if (patch.modo_receta !== undefined) add("modo_receta", patch.modo_receta);
   if (sets.length === 0) return await getProductoPg(schemaRaw, empresaId, id);
 

@@ -1,5 +1,5 @@
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import type { NuevoVehiculoInput, ServicioVehiculo, Vehiculo } from "./types";
+import type { NuevoVehiculoInput, ProximoServicio, ServicioVehiculo, Vehiculo } from "./types";
 
 type Resp<T> = { success?: boolean; data?: T; error?: string };
 
@@ -91,5 +91,34 @@ export async function desactivarVehiculo(id: string): Promise<boolean> {
   } catch (e) {
     console.error("[vehiculos] desactivarVehiculo:", e);
     return false;
+  }
+}
+
+export async function getProximosServicios(
+  opts: { dias?: number; soloVencidos?: boolean } = {}
+): Promise<{ items: ProximoServicio[]; vencidos: number; por_vencer: number }> {
+  const vacio = { items: [] as ProximoServicio[], vencidos: 0, por_vencer: 0 };
+  try {
+    const p = new URLSearchParams();
+    if (opts.dias != null) p.set("dias", String(opts.dias));
+    if (opts.soloVencidos) p.set("vencidos", "1");
+    const qs = p.toString();
+    const res = await fetchWithSupabaseSession(
+      `/api/vehiculos/proximos-servicios${qs ? `?${qs}` : ""}`,
+      { cache: "no-store" }
+    );
+    const json = await leer<{ items?: ProximoServicio[]; vencidos?: number; por_vencer?: number }>(
+      res,
+      "getProximosServicios"
+    );
+    if (!json.data?.items) return vacio;
+    return {
+      items: json.data.items,
+      vencidos: json.data.vencidos ?? 0,
+      por_vencer: json.data.por_vencer ?? 0,
+    };
+  } catch (e) {
+    console.error("[vehiculos] getProximosServicios:", e);
+    return vacio;
   }
 }

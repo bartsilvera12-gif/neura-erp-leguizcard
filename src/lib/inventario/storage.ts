@@ -219,6 +219,8 @@ export async function saveProducto(
         : 0,
     descripcion: datos.descripcion ?? null,
     tipo_producto: datos.tipo_producto ?? "reventa",
+    servicio_intervalo_km: datos.servicio_intervalo_km ?? null,
+    servicio_intervalo_meses: datos.servicio_intervalo_meses ?? null,
   };
 
   const res = await fetch("/api/productos", {
@@ -282,6 +284,8 @@ export async function updateProducto(
     body.tiempo_prep_minutos = datos.tiempo_prep_minutos;
   if (datos.descripcion !== undefined) body.descripcion = datos.descripcion;
   if (datos.tipo_producto !== undefined) body.tipo_producto = datos.tipo_producto;
+  if (datos.servicio_intervalo_km !== undefined) body.servicio_intervalo_km = datos.servicio_intervalo_km;
+  if (datos.servicio_intervalo_meses !== undefined) body.servicio_intervalo_meses = datos.servicio_intervalo_meses;
 
   const res = await fetch(`/api/productos/${encodeURIComponent(id)}`, {
     method: "PATCH",

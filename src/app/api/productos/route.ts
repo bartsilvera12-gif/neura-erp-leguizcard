@@ -15,7 +15,11 @@ const PRODUCTO_COLS =
   "codigo_barras, codigo_barras_interno, imagen_path, imagen_url, " +
   "categoria_principal_id, ubicacion_principal_id, proveedor_principal_id, " +
   "es_vendible, es_insumo, controla_stock, valorizado, unidad_compra, unidad_receta, " +
-  "factor_compra_receta, tiempo_prep_minutos, descripcion";
+  "factor_compra_receta, tiempo_prep_minutos, descripcion, " +
+  // La columna tipo_producto existe en este schema (vino con el clon y su CHECK
+  // acepta 'servicio'). El baseline la habia sacado porque en SU base no estaba
+  // aplicada; aca se persiste, y de ella depende el modelo de servicios.
+  "tipo_producto, marca, servicio_intervalo_km, servicio_intervalo_meses";
 
 function toNumber(v: unknown): unknown {
   return typeof v === "string" ? Number(v) : v;
@@ -164,6 +168,39 @@ export async function POST(request: NextRequest) {
     if (tiempoPrepMinutos !== undefined) insertPayload.tiempo_prep_minutos = tiempoPrepMinutos;
     const descripcion = typeof body.descripcion === "string" ? body.descripcion.trim() || null : (body.descripcion === null ? null : undefined);
     if (descripcion !== undefined) insertPayload.descripcion = descripcion;
+
+    // Tipo de producto y datos del servicio del lubricentro.
+    const tipoProd =
+      body.tipo_producto === "reventa" || body.tipo_producto === "repuesto" || body.tipo_producto === "servicio"
+        ? body.tipo_producto
+        : undefined;
+    if (tipoProd !== undefined) insertPayload.tipo_producto = tipoProd;
+
+    const marcaVal =
+      typeof body.marca === "string" ? body.marca.trim() || null : body.marca === null ? null : undefined;
+    if (marcaVal !== undefined) insertPayload.marca = marcaVal;
+
+    // Los intervalos solo tienen sentido en servicios; en el resto se guardan null.
+    const intKm =
+      body.servicio_intervalo_km == null || body.servicio_intervalo_km === ""
+        ? null
+        : Number(body.servicio_intervalo_km);
+    if (body.servicio_intervalo_km !== undefined) {
+      if (intKm != null && (!Number.isFinite(intKm) || intKm <= 0)) {
+        return NextResponse.json(errorResponse("Intervalo de km inválido."), { status: 400 });
+      }
+      insertPayload.servicio_intervalo_km = tipoProd === "servicio" ? intKm : null;
+    }
+    const intMeses =
+      body.servicio_intervalo_meses == null || body.servicio_intervalo_meses === ""
+        ? null
+        : Number(body.servicio_intervalo_meses);
+    if (body.servicio_intervalo_meses !== undefined) {
+      if (intMeses != null && (!Number.isInteger(intMeses) || intMeses <= 0 || intMeses > 120)) {
+        return NextResponse.json(errorResponse("Intervalo de meses inválido."), { status: 400 });
+      }
+      insertPayload.servicio_intervalo_meses = tipoProd === "servicio" ? intMeses : null;
+    }
 
     const ins = await sb.from("productos").insert(insertPayload).select(PRODUCTO_COLS).single();
     if (ins.error) {

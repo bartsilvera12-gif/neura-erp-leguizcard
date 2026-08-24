@@ -131,6 +131,20 @@ export async function POST(request: NextRequest) {
         ? null
         : String(o.observaciones).slice(0, 4000);
 
+    // Lubricentro: vehículo atendido y lectura de odómetro. Ambos opcionales —
+    // una venta de mostrador no los manda.
+    const vehiculoRaw = o.vehiculo_id;
+    const vehiculoId =
+      vehiculoRaw === null || vehiculoRaw === undefined || vehiculoRaw === ""
+        ? null
+        : String(vehiculoRaw);
+    const kmRaw = o.km_registrado;
+    const kmRegistrado =
+      kmRaw === null || kmRaw === undefined || kmRaw === "" ? null : Number(kmRaw);
+    if (kmRegistrado != null && (!Number.isFinite(kmRegistrado) || kmRegistrado < 0)) {
+      return NextResponse.json(errorResponse("Kilometraje inválido."), { status: 400 });
+    }
+
     // Pedido de cocina (modalidad obligatoria; comportamiento heredado del baseline)
     const pedidoRaw = (o.pedido_cocina ?? null) as Record<string, unknown> | null;
     type PedidoCocinaParsed = {
@@ -205,7 +219,20 @@ export async function POST(request: NextRequest) {
       // Auditoría de stock: todo movimiento queda con el usuario que lo generó.
       createdBy: auth.usuarioCatalogId ?? auth.user?.id ?? null,
       usuarioNombre: authRol?.nombre?.trim() || auth.user?.email || null,
+      vehiculoId,
+      kmRegistrado,
     });
+
+    // El odómetro del vehículo avanza con la venta. Best-effort: si falla, la
+    // venta ya está registrada y no se la tira por esto.
+    if (vehiculoId && kmRegistrado != null) {
+      try {
+        const { actualizarKmSiAvanza } = await import("@/lib/vehiculos/server/vehiculos-pg");
+        await actualizarKmSiAvanza(schema, auth.empresa_id, vehiculoId, kmRegistrado);
+      } catch (e) {
+        console.warn("[/api/ventas/create] km vehículo:", e instanceof Error ? e.message : e);
+      }
+    }
 
     let sub = 0;
     let iv = 0;

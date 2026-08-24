@@ -50,6 +50,9 @@ export interface CreateVentaPgParams {
   /** Auditoría: quién registra la venta. Se propaga a los movimientos de stock. */
   createdBy?: string | null;
   usuarioNombre?: string | null;
+  /** Lubricentro: vehículo atendido y lectura de odómetro del momento. */
+  vehiculoId?: string | null;
+  kmRegistrado?: number | null;
 }
 
 function recalcTotals(items: CreateVentaItemInput[]) {
@@ -201,6 +204,8 @@ export async function createVentaTransaccionalPg(
       metodo_pago: params.metodoPago,
       fecha: fechaIso,
       observaciones: params.observaciones,
+      vehiculo_id: params.vehiculoId ?? null,
+      km_registrado: params.kmRegistrado ?? null,
     })
     .select("id")
     .single();

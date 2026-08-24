@@ -254,3 +254,26 @@ export async function listServiciosDeVehiculo(
   );
   return rows;
 }
+
+/**
+ * Avanza el odometro del vehiculo si la lectura nueva es mayor que la guardada.
+ * Si es menor o igual, no toca nada: el odometro no retrocede y una venta vieja
+ * cargada tarde no debe pisar la lectura actual.
+ */
+export async function actualizarKmSiAvanza(
+  schemaRaw: string,
+  empresaId: string,
+  vehiculoId: string,
+  km: number
+): Promise<boolean> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  const t = quoteSchemaTable(schema, "vehiculos");
+  const r = await pool().query(
+    `UPDATE ${t}
+        SET km_actual = $3::numeric, km_actualizado_at = now()
+      WHERE empresa_id = $1::uuid AND id = $2::uuid
+        AND (km_actual IS NULL OR km_actual < $3::numeric)`,
+    [empresaId, vehiculoId, km]
+  );
+  return (r.rowCount ?? 0) > 0;
+}

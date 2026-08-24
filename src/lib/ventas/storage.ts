@@ -90,6 +90,9 @@ export async function saveVenta(
     retirarSaldoEfectivo?: number;
     /** Cobro mixto: varias líneas de pago que suman el total a cobrar. */
     pagos?: PagoLineaInput[] | null;
+    /** Lubricentro: vehículo atendido y lectura de odómetro. */
+    vehiculoId?: string | null;
+    kmRegistrado?: number | null;
   }
 ): Promise<ResultadoGuardarVenta> {
   if (!datos.items || datos.items.length === 0) {
@@ -120,6 +123,8 @@ export async function saveVenta(
         pedido_id: opts?.pedidoId ?? null,
         pedido_caja_id: opts?.pedidoCajaId ?? null,
         caja_id: opts?.cajaId ?? null,
+        vehiculo_id: opts?.vehiculoId ?? null,
+        km_registrado: opts?.kmRegistrado ?? null,
         usar_saldo_favor: opts?.usarSaldoFavor ?? 0,
         retirar_saldo_efectivo: opts?.retirarSaldoEfectivo ?? 0,
       }),

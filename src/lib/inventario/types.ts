@@ -28,6 +28,10 @@ export interface Producto {
   /** reventa: se compra y se revende · repuesto: se consume en reparaciones ·
    *  servicio: mano de obra, sin stock propio. */
   tipo_producto?: "reventa" | "repuesto" | "servicio";
+  /** Solo servicios: cada cuantos km se repite. Alimenta los avisos de mantenimiento. */
+  servicio_intervalo_km?: number | null;
+  /** Solo servicios: cada cuantos meses se repite. */
+  servicio_intervalo_meses?: number | null;
   /** Clasificación gastronómica: producto que se vende al cliente final. */
   es_vendible?: boolean;
   /** Clasificación gastronómica: producto usado como insumo en recetas. */

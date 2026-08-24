@@ -9,6 +9,8 @@ import ProductPickerModal, { type ProductoPickerItem, type AgregarVentaPayload }
 import { saveVenta, type FaltanteStock } from "@/lib/ventas/storage";
 import { getProductos } from "@/lib/inventario/storage";
 import CrearClienteModal, { type ClienteCreado } from "@/components/clientes/CrearClienteModal";
+import { getVehiculos } from "@/lib/vehiculos/storage";
+import type { Vehiculo } from "@/lib/vehiculos/types";
 import { generarYAbrirRecibo } from "@/lib/recibos/client";
 import type { TipoIvaVenta, TipoVenta, MonedaVenta, LineaVenta, MetodoPago, TipoPrecioVenta } from "@/lib/ventas/types";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
@@ -179,6 +181,12 @@ export default function NuevaVentaPage() {
   // Nota de remisión: activada si el cliente la usa; toggle manual solo con cliente.
   const [generaNotaRemision, setGeneraNotaRemision] = useState(false);
 
+  // Vehiculo atendido (lubricentro). Opcional: una venta de mostrador no lo usa.
+  // Si hay cliente seleccionado, la lista se acota a sus autos.
+  const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
+  const [vehiculoId, setVehiculoId] = useState("");
+  const [kmRegistrado, setKmRegistrado] = useState("");
+
   // Modal de alta rápida de cliente (crea en el módulo Clientes + lo selecciona).
   const [showCrearCliente, setShowCrearCliente] = useState(false);
 
@@ -194,6 +202,20 @@ export default function NuevaVentaPage() {
       .then((j) => { if (!cancel) { setSaldoFavor(Number(j?.data?.saldo) || 0); setUsarSaldo(0); } })
       .catch(() => { if (!cancel) { setSaldoFavor(0); setUsarSaldo(0); } });
     return () => { cancel = true; };
+  }, [clienteId]);
+
+  // Los vehiculos se recargan al cambiar de cliente: con cliente, solo los suyos.
+  useEffect(() => {
+    let cancel = false;
+    getVehiculos({ soloActivos: true, clienteId: clienteId || undefined }).then((rows) => {
+      if (cancel) return;
+      setVehiculos(rows);
+      // Si el vehiculo elegido no pertenece al cliente nuevo, se deselecciona.
+      setVehiculoId((prev) => (prev && rows.some((v) => v.id === prev) ? prev : ""));
+    });
+    return () => {
+      cancel = true;
+    };
   }, [clienteId]);
 
   function handleClienteCreado(c: ClienteCreado) {
@@ -955,6 +977,8 @@ export default function NuevaVentaPage() {
             },
         {
           permitirSinStock, pedidoId, pedidoCajaId, cajaId: cajaActivaFinal,
+          vehiculoId: vehiculoId || null,
+          kmRegistrado: vehiculoId && kmRegistrado ? Number(kmRegistrado) : null,
           usarSaldoFavor: saldoAplicado,
           retirarSaldoEfectivo: retirarExcedente ? saldoRestante : 0,
           pagos: metodoPago === "mixto"
@@ -1158,6 +1182,58 @@ export default function NuevaVentaPage() {
                     Generar nota de remisión
                   </label>
                 </div>
+              )}
+            </div>
+
+            {/* Vehiculo atendido (lubricentro) */}
+            <div>
+              <label className={labelClass}>
+                Vehículo <span className="text-xs font-normal text-gray-400">(opcional)</span>
+              </label>
+              <select
+                value={vehiculoId}
+                onChange={(e) => setVehiculoId(e.target.value)}
+                className={inputClass}
+              >
+                <option value="">Sin vehículo</option>
+                {vehiculos.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.patente}
+                    {[v.marca, v.modelo].filter(Boolean).length > 0
+                      ? ` — ${[v.marca, v.modelo].filter(Boolean).join(" ")}`
+                      : ""}
+                  </option>
+                ))}
+              </select>
+
+              {vehiculoId && (
+                <div className="mt-2">
+                  <label className="mb-1 block text-xs font-medium text-slate-600">
+                    Kilometraje al momento del servicio
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={kmRegistrado}
+                    onChange={(e) => setKmRegistrado(e.target.value)}
+                    placeholder={(() => {
+                      const v = vehiculos.find((x) => x.id === vehiculoId);
+                      return v?.km_actual != null ? String(Math.round(v.km_actual)) : "0";
+                    })()}
+                    className={inputClass}
+                  />
+                  <p className="mt-1 text-[11px] text-gray-400">
+                    Queda en el historial del vehículo. Si es mayor al registrado, actualiza su odómetro.
+                  </p>
+                </div>
+              )}
+
+              {vehiculos.length === 0 && (
+                <p className="mt-1 text-[11px] text-gray-400">
+                  {clienteId
+                    ? "Este cliente no tiene vehículos cargados."
+                    : "No hay vehículos cargados todavía."}
+                </p>
               )}
             </div>
 

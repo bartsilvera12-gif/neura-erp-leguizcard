@@ -84,3 +84,32 @@ export function formatVehiculo(v: Pick<Vehiculo, "patente" | "marca" | "modelo">
   const desc = [v.marca, v.modelo].filter(Boolean).join(" ");
   return desc ? `${v.patente} — ${desc}` : v.patente;
 }
+
+/**
+ * Un servicio que le toca (o le tocaba) a un vehiculo.
+ * Vence por kilometraje o por tiempo, lo que ocurra primero.
+ */
+export interface ProximoServicio {
+  vehiculo_id: string;
+  patente: string;
+  marca: string | null;
+  modelo: string | null;
+  cliente_id: string | null;
+  cliente_nombre: string | null;
+  cliente_telefono: string | null;
+  km_actual: number | null;
+  producto_id: string;
+  servicio_nombre: string;
+  intervalo_km: number | null;
+  intervalo_meses: number | null;
+  /** Ultima vez que se le hizo este servicio. */
+  ultima_fecha: string;
+  ultimo_km: number | null;
+  proximo_km: number | null;
+  proxima_fecha: string | null;
+  /** Negativo = ya se paso. */
+  km_restantes: number | null;
+  /** Negativo = ya se paso. */
+  dias_restantes: number | null;
+  vencido: boolean;
+}

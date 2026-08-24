@@ -6,8 +6,6 @@
 import { sendMail, EMAIL_FROM_DEFAULT, type SendMailResult } from "@/lib/email/mailer";
 import type { OrdenCompraRow } from "./ordenes-compra-pg";
 
-const DEST_DEFAULT = "info@ferreteriarepublica.com.py";
-
 function gs(v: unknown): string {
   const n = typeof v === "number" ? v : Number(v ?? 0);
   return `Gs. ${Math.round(Number.isFinite(n) ? n : 0).toLocaleString("es-PY")}`;
@@ -93,7 +91,13 @@ function buildHtml(rows: OrdenCompraRow[]): { subject: string; html: string } {
 export async function enviarConfirmacionOrdenCompra(rows: OrdenCompraRow[]): Promise<SendMailResult> {
   if (rows.length === 0) return { ok: false, error: "OC sin líneas." };
   const { subject, html } = buildHtml(rows);
-  const to = (process.env.OC_EMAIL_TO ?? "").trim() || DEST_DEFAULT;
+  // Sin destinatario configurado NO se envia. El baseline traia hardcodeado el
+  // correo de otra instancia como fallback, con lo que las OC de este cliente
+  // terminaban en la casilla de un tercero. Preferimos no enviar.
+  const to = (process.env.OC_EMAIL_TO ?? "").trim();
+  if (!to) {
+    return { ok: false, error: "OC_EMAIL_TO no configurada: no se envia la confirmacion de la orden de compra." };
+  }
   const from = (process.env.SMTP_FROM ?? "").trim() || EMAIL_FROM_DEFAULT;
   return sendMail({ to, from, subject, html });
 }

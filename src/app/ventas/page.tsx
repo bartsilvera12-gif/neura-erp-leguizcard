@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { ChevronDown, Wallet } from "lucide-react";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
+import CajaControlPanel from "@/components/caja/CajaControlPanel";
+import PedidosPendientesCaja from "./PedidosPendientesCaja";
 import { FancySelect } from "@/components/ui/FancySelect";
 import { getVentas } from "@/lib/ventas/storage";
 import type { Venta, TipoVenta, TipoIvaVenta } from "@/lib/ventas/types";
@@ -148,6 +151,7 @@ export default function VentasPage() {
   const [busqueda,   setBusqueda]   = useState("");
   const [filtroTipo, setFiltroTipo] = useState<TipoVenta | "">("");
   const [filtroIva,  setFiltroIva]  = useState<TipoIvaVenta | "">("");
+  const [showCajas,  setShowCajas]  = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -244,6 +248,28 @@ export default function VentasPage() {
           />
         </div>
       </div>
+
+      {/* ── Caja ──────────────────────────────────────────────────────────────
+          Colapsado por defecto para no distraer al cajero (igual criterio que el
+          resto de las instancias que ya usan el modulo). */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowCajas((v) => !v)}
+          className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm ring-1 ring-[#4FAEB2]/15 transition-colors hover:bg-slate-50"
+          aria-expanded={showCajas}
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+            <Wallet className="h-4 w-4 text-[#4FAEB2]" />
+            Información de caja
+            <span className="text-xs font-normal text-slate-400">{showCajas ? "(tocá para ocultar)" : "(tocá para ver)"}</span>
+          </span>
+          <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${showCajas ? "rotate-180" : ""}`} />
+        </button>
+        {showCajas && <div className="mt-3"><CajaControlPanel /></div>}
+      </div>
+
+      <PedidosPendientesCaja />
 
       {/* ── Tabla de ventas ───────────────────────────────────────────────────── */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm ring-1 ring-[#4FAEB2]/15 p-6">

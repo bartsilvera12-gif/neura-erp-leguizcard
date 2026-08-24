@@ -132,6 +132,12 @@ const MENU_STRUCTURE: MenuItem[] = [
     key: "notas_credito", slug: "notas_credito", label: "Notas de crédito",
     href: "/notas-credito", icon: ScrollText,
   },
+  // Reportes: hoy solo arqueos de caja. El panel del turno vive dentro de /ventas.
+  {
+    key: "reportes", slug: "reportes", label: "Reportes",
+    href: "/reportes/cajas", icon: BarChart3,
+    children: [{ label: "Arqueos de caja", href: "/reportes/cajas" }],
+  },
   // Sistema: el acceso lo decide empresa_modulos; si el módulo no está habilitado, no se muestra.
   { key: "usuarios", slug: "usuarios", label: "Usuarios", href: "/usuarios", icon: UserCog },
   {
@@ -155,7 +161,7 @@ const MENU_STRUCTURE: MenuItem[] = [
 const MENU_FAMILIES: { id: string; titulo: string; keys: string[] }[] = [
   { id: "inicio", titulo: "Inicio", keys: ["dashboard"] },
   { id: "comercial", titulo: "Comercial", keys: ["clientes", "gestion-clientes", "ventas", "presupuestos"] },
-  { id: "finanzas", titulo: "Finanzas", keys: ["recibos", "gastos", "notas_credito"] },
+  { id: "finanzas", titulo: "Finanzas", keys: ["recibos", "gastos", "notas_credito", "reportes"] },
   { id: "operaciones", titulo: "Operaciones", keys: ["inventario", "compras", "remision"] },
   { id: "omnicanal", titulo: "Omnicanal", keys: ["conversaciones"] },
   { id: "administracion", titulo: "Administración", keys: ["usuarios", "configuracion"] },

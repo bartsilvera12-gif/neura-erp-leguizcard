@@ -2,7 +2,7 @@
 
 import PageHeader from "@/components/ui/PageHeader";
 import { ReportCard } from "@/components/reportes/ReportCard";
-import { Wallet, Truck, Package, ShoppingCart, ArrowLeftRight, Lock, BarChart3, CalendarClock, CreditCard, FileText, PackageMinus, Boxes, TrendingUp } from "lucide-react";
+import { Wallet, Truck, Package, ShoppingCart, ArrowLeftRight, Lock, BarChart3, CalendarClock, CreditCard, FileText, PackageMinus, Boxes, TrendingUp, Wrench, Users } from "lucide-react";
 
 /** Hub de reportería operativa (Fase 1: Estado de cuenta + Proveedores). */
 export default function ReportesPage() {
@@ -15,6 +15,24 @@ export default function ReportesPage() {
       />
 
       <ul className="m-0 grid list-none gap-4 p-0 sm:grid-cols-2 xl:grid-cols-3">
+        <li>
+          <ReportCard
+            title="Servicios del lubricentro"
+            subtitle="Ranking y rentabilidad por servicio"
+            icon={Wrench}
+            description="Qué servicios se hacen, cuánto dejan, y el margen de cada uno según el costo de su receta."
+            href="/reportes/servicios"
+          />
+        </li>
+        <li>
+          <ReportCard
+            title="Historial de clientes"
+            subtitle="Autos, visitas y gasto por cliente"
+            icon={Users}
+            description="Qué vehículos tiene cada cliente, cuántas veces vino, cuánto gastó y hace cuánto no aparece."
+            href="/reportes/historial-clientes"
+          />
+        </li>
         <li>
           <ReportCard
             title="Rentabilidad por método de pago"

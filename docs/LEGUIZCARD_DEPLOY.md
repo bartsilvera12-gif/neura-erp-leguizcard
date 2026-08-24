@@ -240,6 +240,29 @@ todo el costo al primer medio. Verificado con una venta de 100.000 (costo 40.000
 60% tarjeta con POS al 5% y 40% efectivo: tarjeta neto 57.000 / costo 24.000 / margen
 33.000; efectivo neto 40.000 / costo 16.000 / margen 24.000. Las sumas cierran.
 
+### Reportes específicos del lubricentro
+
+- **`/reportes/servicios`** — catálogo de servicios con su **margen teórico** (precio contra
+  costo de la receta) y, si hubo ventas en el período, el **margen real**. El margen teórico
+  no depende de que haya ventas: sirve para revisar precios desde el día uno. Avisa cuántos
+  servicios no tienen receta cargada, porque sin ella el costo no se puede calcular.
+- **`/reportes/historial-clientes`** — qué autos tiene cada cliente, cuántas veces vino,
+  cuánto gastó, ticket promedio y hace cuánto no aparece. Filtro de "sin venir hace +6 meses"
+  para recontactar.
+
+El costo de un servicio se toma en este orden: `ventas_items.costo_unitario` si la línea lo
+declaró → `fn_receta_costeo()` de su receta → `productos.costo_promedio`.
+
+> **No se reimplementó el costeo.** `fn_receta_costeo()` ya resuelve la conversión de
+> unidades entre el ítem y el insumo, la merma —que es una **fracción 0..1**, no un
+> porcentaje— y el rendimiento. Copiar esa fórmula a mano es como se introducen diferencias
+> de costo silenciosas; el primer intento de este reporte tenía justamente ese bug
+> (`merma_pct / 100`).
+
+Verificado con un servicio de receta conocida: 4 L de aceite a 20.000 con 5% de merma +
+1 filtro de 35.000 → costo 119.000, precio 250.000, margen 131.000 (52,4%). El catálogo
+devuelve el costo correcto **sin ninguna venta cargada**.
+
 ## 7. Módulos
 
 `0001` habilita el catálogo completo (31) como baseline; `0005` lo acota al alcance

@@ -159,6 +159,7 @@ const MENU_STRUCTURE: MenuItem[] = [
     children: [
       { label: "Ver todos", href: "/reportes", exactMatch: true },
       { label: "Arqueos de caja", href: "/reportes/cajas" },
+      { label: "Rentabilidad por medio", href: "/reportes/rentabilidad-medios" },
       { label: "Stock mínimo", href: "/reportes/stock-minimo" },
       { label: "Proyección de inventario", href: "/reportes/proyeccion-inventario" },
       { label: "Rotación ABC", href: "/reportes/rotacion-abc" },

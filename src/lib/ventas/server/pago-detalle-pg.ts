@@ -46,7 +46,7 @@ export interface EntidadBancariaInput {
   orden: number;
 }
 
-const ENT_COLS = "id, codigo, nombre, tipo, activo, orden";
+const ENT_COLS = "id, codigo, nombre, tipo, activo, orden, comision_porcentaje";
 
 /**
  * Lista entidades de la empresa. Por defecto solo activas (selector de cobro);

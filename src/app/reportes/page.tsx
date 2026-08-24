@@ -17,6 +17,15 @@ export default function ReportesPage() {
       <ul className="m-0 grid list-none gap-4 p-0 sm:grid-cols-2 xl:grid-cols-3">
         <li>
           <ReportCard
+            title="Rentabilidad por método de pago"
+            subtitle="Qué deja realmente cada medio"
+            icon={CreditCard}
+            description="Bruto, comisión del POS, neto recibido, costo prorrateado y margen por cada medio de cobro."
+            href="/reportes/rentabilidad-medios"
+          />
+        </li>
+        <li>
+          <ReportCard
             title="Estado de cuenta"
             subtitle="Saldos, movimientos y situación financiera"
             icon={Wallet}

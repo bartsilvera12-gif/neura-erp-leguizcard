@@ -53,6 +53,8 @@ Luego, en orden (todos idempotentes):
 | `supabase/leguizcard/provision/0006_productos_marca.sql` | Agrega `productos.marca` (la usa el reporte de stock mínimo). |
 | `supabase/leguizcard/provision/0007_vehiculos.sql` | Tabla `vehiculos` + `ventas.vehiculo_id` / `ventas.km_registrado`, con RLS. |
 | `supabase/leguizcard/provision/0008_modulo_vehiculos.sql` | Alta del módulo `vehiculos` en el catálogo y habilitación. |
+| `supabase/leguizcard/provision/0009_servicio_intervalos.sql` | `productos.servicio_intervalo_km` / `_meses` para los avisos de mantenimiento. |
+| `supabase/leguizcard/provision/0010_entidades_comision.sql` | `entidades_bancarias.comision_porcentaje` (comisión del POS). |
 
 Aplicar un `.sql` con el helper del repo:
 
@@ -208,6 +210,35 @@ Verificado a nivel base con RLS activo bajo el JWT del admin: unicidad normaliza
 patente en sus tres escrituras, los cuatro CHECKs, el rechazo de un INSERT con el
 `empresa_id` de Instemaq, el enganche venta↔vehículo con km, la consulta de historial y el
 trigger de `updated_at`.
+
+## 6.d Circuito del servicio y rentabilidad
+
+**Venta → vehículo.** `ventas/nueva` tiene selector de vehículo (acotado al cliente
+elegido) y campo de kilometraje. Se encadena por `storage` → `/api/ventas/create` →
+`create-venta-pg` → INSERT. Al registrar la venta el odómetro del vehículo avanza **solo
+si** la lectura es mayor que la guardada; es best-effort, si falla la venta ya quedó hecha.
+
+**Intervalos de mantenimiento.** `productos.servicio_intervalo_km` y
+`servicio_intervalo_meses` viven en el producto-servicio. El formulario de alta muestra el
+bloque solo cuando `tipo_producto = 'servicio'`.
+
+> Se **restauró** la persistencia de `tipo_producto` en `/api/productos`. El baseline la
+> había revertido (commit `d025218` en Instemaq) porque en *esa* base la columna no estaba
+> aplicada; en `leguizcard` existe y su CHECK ya acepta `'servicio'`. Sin esto no se podía
+> crear un producto-servicio y todo el modelo quedaba inerte.
+
+**Avisos de próximo servicio** (`/vehiculos/proximos-servicios`). Cruza el último servicio
+hecho sobre cada vehículo con su intervalo y el km actual. Vence por km o por tiempo, lo
+que ocurra primero; ignora ventas anuladas; anticipa por km con el 10% del intervalo.
+Verificado con cuatro escenarios: vencido por km (−1.000 km), vencido por tiempo
+(−61 días), por vencer (400 km) y al día (no aparece).
+
+**Rentabilidad por método de pago** (`/reportes/rentabilidad-medios`). Bruto, comisión del
+POS (`entidades_bancarias.comision_porcentaje`), neto recibido, costo prorrateado y margen.
+El costo se prorratea según cuánto se cobró con cada medio, así una venta mixta no carga
+todo el costo al primer medio. Verificado con una venta de 100.000 (costo 40.000) cobrada
+60% tarjeta con POS al 5% y 40% efectivo: tarjeta neto 57.000 / costo 24.000 / margen
+33.000; efectivo neto 40.000 / costo 16.000 / margen 24.000. Las sumas cierran.
 
 ## 7. Módulos
 

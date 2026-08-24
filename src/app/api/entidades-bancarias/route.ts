@@ -81,6 +81,18 @@ export async function PATCH(request: NextRequest) {
     if (b.tipo !== undefined) patch.tipo = normTipo(b.tipo);
     if (b.activo !== undefined) patch.activo = b.activo === true;
     if (b.orden !== undefined && Number.isFinite(Number(b.orden))) patch.orden = Math.floor(Number(b.orden));
+    // Comision que retiene el medio de cobro (POS, billetera). Alimenta el
+    // reporte de rentabilidad por metodo de pago.
+    if (b.comision_porcentaje !== undefined) {
+      const cp =
+        b.comision_porcentaje === null || b.comision_porcentaje === ""
+          ? null
+          : Number(b.comision_porcentaje);
+      if (cp != null && (!Number.isFinite(cp) || cp < 0 || cp > 100)) {
+        return NextResponse.json(errorResponse("Comisión inválida (0 a 100)."), { status: 400 });
+      }
+      patch.comision_porcentaje = cp;
+    }
     try {
       const entidad = await updateEntidadBancaria(schema, ctx.auth.empresa_id, id, patch);
       if (!entidad) return NextResponse.json(errorResponse("Entidad no encontrada."), { status: 404 });

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import DetalleVentaModal from "@/components/ventas/DetalleVentaModal";
 import { useEffect, useState } from "react";
 import { ChevronDown, Wallet } from "lucide-react";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
@@ -147,6 +148,7 @@ function ivaResumen(v: Venta): string {
 // ── Componente principal ───────────────────────────────────────────────────────
 
 export default function VentasPage() {
+  const [detalleId, setDetalleId] = useState<string | null>(null);
   const [todas,      setTodas]      = useState<Venta[]>([]);
   const [busqueda,   setBusqueda]   = useState("");
   const [filtroTipo, setFiltroTipo] = useState<TipoVenta | "">("");
@@ -170,6 +172,10 @@ export default function VentasPage() {
   }, []);
 
   const metricas = calcularMetricas(todas);
+
+  // Se resuelve contra `todas` y no se guarda la venta en el estado: si la
+  // lista se recarga, el panel muestra la version fresca y no una copia vieja.
+  const detalleVenta = detalleId ? todas.find((v) => v.id === detalleId) ?? null : null;
 
   const filtradas = todas.filter((v) => {
     // Búsqueda global: número de control, nombre o SKU de cualquier ítem
@@ -361,7 +367,20 @@ export default function VentasPage() {
                 filtradas.map((v) => {
                   const cantTotal = v.items.reduce((s, i) => s + i.cantidad, 0);
                   return (
-                    <tr key={v.id} className="border-b border-slate-200 last:border-0 hover:bg-[#4FAEB2]/[0.04] transition-colors">
+                    <tr
+                      key={v.id}
+                      onClick={() => setDetalleId(v.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setDetalleId(v.id);
+                        }
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Ver el detalle de la venta ${v.numero_control}`}
+                      className="cursor-pointer border-b border-slate-200 last:border-0 transition-colors hover:bg-[#4FAEB2]/[0.04] focus:bg-[#4FAEB2]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4FAEB2]/40"
+                    >
                       <td className="py-4 pr-4 font-mono text-xs text-gray-500 align-middle">
                         {v.numero_control}
                       </td>
@@ -405,6 +424,7 @@ export default function VentasPage() {
                           href={`/api/ventas/${v.id}/ticket`}
                           target="_blank"
                           rel="noopener"
+                          onClick={(e) => e.stopPropagation()}
                           className="inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"
                           title="Abrir comandas + ticket cliente"
                         >
@@ -420,6 +440,10 @@ export default function VentasPage() {
         </EdgeScrollArea>
 
       </div>
+
+      {detalleVenta && (
+        <DetalleVentaModal venta={detalleVenta} onClose={() => setDetalleId(null)} />
+      )}
 
     </div>
   );

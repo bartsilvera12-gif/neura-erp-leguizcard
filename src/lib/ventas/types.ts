@@ -71,6 +71,17 @@ export interface Venta {
    * autoimpresor); si es null, solo lleva ticket interno.
    */
   cliente_id?: string | null;
+  /** Nombre del cliente, resuelto por el listado. Solo lectura. */
+  cliente_nombre?: string | null;
+
+  /** Vehiculo atendido y odometro del momento (lubricentro). Solo lectura. */
+  vehiculo_id?: string | null;
+  vehiculo_patente?: string | null;
+  vehiculo_desc?: string | null;
+  km_registrado?: number | null;
+
+  /** Lo que anoto el taller en la venta. */
+  observaciones?: string | null;
 
   /** La venta emite nota de remisión (documento no fiscal). */
   genera_nota_remision?: boolean;

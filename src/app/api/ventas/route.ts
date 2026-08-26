@@ -16,6 +16,10 @@ interface VentaRow {
   tipo_venta: string;
   plazo_dias: number | null;
   fecha: string;
+  cliente_id: string | null;
+  vehiculo_id: string | null;
+  km_registrado: number | string | null;
+  observaciones: string | null;
 }
 
 interface VentaItemRow {
@@ -61,7 +65,7 @@ export async function GET(request: NextRequest) {
     const ventasQ = await ctx.supabase
       .from("ventas")
       .select(
-        "id, empresa_id, numero_control, moneda, tipo_cambio, subtotal, monto_iva, total, tipo_venta, plazo_dias, metodo_pago, fecha"
+        "id, empresa_id, numero_control, moneda, tipo_cambio, subtotal, monto_iva, total, tipo_venta, plazo_dias, metodo_pago, fecha, cliente_id, vehiculo_id, km_registrado, observaciones"
       )
       .eq("empresa_id", empresaId)
       .order("fecha", { ascending: false })
@@ -78,6 +82,47 @@ export async function GET(request: NextRequest) {
 
     const ventasRows = (ventasQ.data ?? []) as VentaRow[];
     const itemsRows = (itemsQ.data ?? []) as VentaItemRow[];
+
+    // Los nombres de cliente y vehiculo se resuelven aparte y se cruzan en JS,
+    // igual que los items. Se piden solo los que aparecen en estas ventas, no
+    // el padron completo.
+    const idsCli = [...new Set(ventasRows.map((r) => r.cliente_id).filter(Boolean))] as string[];
+    const idsVeh = [...new Set(ventasRows.map((r) => r.vehiculo_id).filter(Boolean))] as string[];
+
+    const [cliQ, vehQ] = await Promise.all([
+      idsCli.length
+        ? ctx.supabase
+            .from("clientes")
+            .select("id, nombre, nombre_contacto, empresa, tipo_cliente")
+            .eq("empresa_id", empresaId)
+            .in("id", idsCli)
+        : Promise.resolve({ data: [], error: null }),
+      idsVeh.length
+        ? ctx.supabase
+            .from("vehiculos")
+            .select("id, patente, marca, modelo")
+            .eq("empresa_id", empresaId)
+            .in("id", idsVeh)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    // Mismo criterio que clienteNombre(): razon social si es empresa, si no el
+    // contacto, y la columna nombre como ultimo recurso.
+    const nombreCli = new Map<string, string>();
+    for (const c of (cliQ.data ?? []) as Record<string, unknown>[]) {
+      const empresaNom = String(c.empresa ?? "").trim();
+      const contacto = String(c.nombre_contacto ?? "").trim();
+      const nombre = String(c.nombre ?? "").trim();
+      const elegido =
+        (c.tipo_cliente === "empresa" && empresaNom) || contacto || nombre || "";
+      if (elegido) nombreCli.set(String(c.id), elegido);
+    }
+
+    const vehPorId = new Map<string, { patente: string; desc: string | null }>();
+    for (const v of (vehQ.data ?? []) as Record<string, unknown>[]) {
+      const desc = [v.marca, v.modelo].filter(Boolean).join(" ").trim();
+      vehPorId.set(String(v.id), { patente: String(v.patente ?? ""), desc: desc || null });
+    }
 
     const byVenta = new Map<string, VentaItemRow[]>();
     for (const row of itemsRows) {
@@ -107,6 +152,13 @@ export async function GET(request: NextRequest) {
           ? "efectivo"
           : undefined,
         fecha: r.fecha,
+        cliente_id: r.cliente_id ?? null,
+        cliente_nombre: r.cliente_id ? nombreCli.get(r.cliente_id) ?? null : null,
+        vehiculo_id: r.vehiculo_id ?? null,
+        vehiculo_patente: r.vehiculo_id ? vehPorId.get(r.vehiculo_id)?.patente ?? null : null,
+        vehiculo_desc: r.vehiculo_id ? vehPorId.get(r.vehiculo_id)?.desc ?? null : null,
+        km_registrado: r.km_registrado != null ? num(r.km_registrado) : null,
+        observaciones: r.observaciones ?? null,
       };
     });
 

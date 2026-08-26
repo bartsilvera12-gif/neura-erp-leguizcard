@@ -1,11 +1,33 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { esRutaDeModuloInactivo, moduloDeRuta } from "@/lib/modulos/modulos-inactivos";
 
 /**
  * Refresca la sesión Supabase en cookies antes de Route Handlers / RSC.
  * Solo NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY (sin db.schema en getUser).
  */
 export async function middleware(request: NextRequest) {
+  // Modulos apagados: se cortan en el borde, antes de tocar Supabase.
+  // `empresa_modulos.activo = false` solo saca la entrada del menu; sin esto las
+  // rutas de esos modulos siguen respondiendo a cualquier usuario autenticado.
+  const { pathname } = request.nextUrl;
+  if (esRutaDeModuloInactivo(pathname)) {
+    const mod = moduloDeRuta(pathname);
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Módulo no habilitado en esta instancia${mod ? `: ${mod.slug}` : ""}.`,
+        },
+        { status: 404 }
+      );
+    }
+    // Paginas: al dashboard. El proyecto no tiene not-found.tsx propio, asi que
+    // un rewrite a /404 dependeria del fallback interno de Next; redirigir es
+    // comportamiento definido y ademas deja al usuario en un lugar util.
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

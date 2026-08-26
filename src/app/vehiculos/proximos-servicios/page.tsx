@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CalendarClock, CheckCircle2, Phone } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
@@ -50,6 +51,7 @@ const VENTANAS = [
 ];
 
 export default function ProximosServiciosPage() {
+  const router = useRouter();
   const [items, setItems] = useState<ProximoServicio[]>([]);
   const [cargando, setCargando] = useState(true);
   const [dias, setDias] = useState(30);
@@ -147,11 +149,22 @@ export default function ProximosServiciosPage() {
                   return (
                     <tr
                       key={`${i.vehiculo_id}-${i.producto_id}`}
-                      className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60"
+                      onClick={() => router.push(`/vehiculos/${i.vehiculo_id}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          router.push(`/vehiculos/${i.vehiculo_id}`);
+                        }
+                      }}
+                      tabIndex={0}
+                      role="link"
+                      aria-label={`Ver la ficha de ${i.patente}`}
+                      className="cursor-pointer border-b border-slate-100 last:border-0 transition-colors hover:bg-slate-50/60 focus:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4FAEB2]/40"
                     >
                       <td className="py-2.5 pr-3">
                         <Link
                           href={`/vehiculos/${i.vehiculo_id}`}
+                          onClick={(e) => e.stopPropagation()}
                           className="font-mono font-semibold text-[#3F8E91] hover:underline"
                         >
                           {i.patente}

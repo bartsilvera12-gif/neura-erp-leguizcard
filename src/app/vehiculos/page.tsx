@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Car, Plus, Search } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
@@ -13,6 +14,7 @@ function formatKm(km: number | null): string {
 }
 
 export default function VehiculosPage() {
+  const router = useRouter();
   const [lista, setLista] = useState<Vehiculo[]>([]);
   const [busqueda, setBusqueda] = useState("");
   const [soloActivos, setSoloActivos] = useState(true);
@@ -115,10 +117,24 @@ export default function VehiculosPage() {
               </thead>
               <tbody>
                 {filtrados.map((v) => (
-                  <tr key={v.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60">
+                  <tr
+                    key={v.id}
+                    onClick={() => router.push(`/vehiculos/${v.id}`)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        router.push(`/vehiculos/${v.id}`);
+                      }
+                    }}
+                    tabIndex={0}
+                    role="link"
+                    aria-label={`Ver la ficha de ${v.patente}`}
+                    className="cursor-pointer border-b border-slate-100 last:border-0 transition-colors hover:bg-slate-50/60 focus:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4FAEB2]/40"
+                  >
                     <td className="py-2.5 pr-3">
                       <Link
                         href={`/vehiculos/${v.id}`}
+                        onClick={(e) => e.stopPropagation()}
                         className="font-mono font-semibold text-[#3F8E91] hover:underline"
                       >
                         {v.patente}

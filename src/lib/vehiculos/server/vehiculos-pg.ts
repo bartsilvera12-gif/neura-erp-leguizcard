@@ -31,6 +31,7 @@ export interface VehiculoRow {
   km_actualizado_at: string | null;
   aceite_tipo: string | null;
   aceite_litros: string | number | null;
+  imagen_path: string | null;
   observaciones: string | null;
   activo: boolean;
   created_at: string;
@@ -47,7 +48,7 @@ const COLS = `v.id::text AS id, v.empresa_id::text AS empresa_id, v.cliente_id::
               ) AS cliente_nombre,
               v.patente, v.marca, v.modelo, v.anio, v.motor, v.combustible, v.vin, v.color,
               v.km_actual, v.km_actualizado_at, v.aceite_tipo, v.aceite_litros,
-              v.observaciones, v.activo, v.created_at, v.updated_at`;
+              v.imagen_path, v.observaciones, v.activo, v.created_at, v.updated_at`;
 
 function from(schema: string): string {
   return `${quoteSchemaTable(schema, "vehiculos")} v

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Car, CalendarClock, Droplet, Gauge, Loader2, Pencil, Wrench } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
+import FotoVehiculo from "@/components/vehiculos/FotoVehiculo";
 import { actualizarVehiculo, getVehiculo } from "@/lib/vehiculos/storage";
 import {
   COMBUSTIBLE_LABEL,
@@ -244,7 +245,21 @@ export default function VehiculoDetallePage({ params }: { params: Promise<{ id: 
             <Car className="h-4 w-4 text-[#4FAEB2]" />
             Ficha del vehículo
           </h2>
-          <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <div className="mt-4 flex flex-col gap-5 sm:flex-row">
+            {/* La foto va primero: es lo que confirma de un vistazo que se
+                abrio el auto correcto, antes de leer ningun dato. */}
+            <div className="w-full shrink-0 sm:w-56">
+              <FotoVehiculo
+                vehiculoId={vehiculo.id}
+                patente={vehiculo.patente}
+                imagenUrl={vehiculo.imagen_url}
+                onCambio={(url) =>
+                  setVehiculo((prev) => (prev ? { ...prev, imagen_url: url } : prev))
+                }
+              />
+            </div>
+
+          <dl className="grid flex-1 grid-cols-2 gap-4 sm:grid-cols-3">
             <Dato
               label="Cliente"
               value={
@@ -272,6 +287,7 @@ export default function VehiculoDetallePage({ params }: { params: Promise<{ id: 
               value={vehiculo.activo ? "Activo" : <span className="text-slate-500">De baja</span>}
             />
           </dl>
+          </div>
           {/* Que aceite lleva. Se destaca porque es el dato operativo de un
               lubricentro: sin el, el mecanico pregunta o adivina. */}
           <div className="mt-4 flex items-start gap-2 rounded-lg border border-[#4FAEB2]/30 bg-[#4FAEB2]/5 px-3 py-2">

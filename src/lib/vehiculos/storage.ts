@@ -62,6 +62,49 @@ export async function getVehiculo(id: string): Promise<{
   }
 }
 
+/**
+ * Sube (o reemplaza) la foto del vehiculo. Devuelve la URL firmada para
+ * mostrarla enseguida, sin volver a pedir la ficha.
+ */
+export async function subirImagenVehiculo(
+  id: string,
+  file: File
+): Promise<{ ok: true; imagen_url: string | null } | { ok: false; error: string }> {
+  try {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetchWithSupabaseSession(
+      `/api/vehiculos/${encodeURIComponent(id)}/imagen`,
+      { method: "POST", body: fd }
+    );
+    const json = (await res.json().catch(() => ({}))) as Resp<{ imagen_url?: string | null }>;
+    if (!res.ok || !json.success) {
+      return { ok: false, error: json.error ?? "No se pudo subir la foto." };
+    }
+    return { ok: true, imagen_url: json.data?.imagen_url ?? null };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Error de red." };
+  }
+}
+
+export async function quitarImagenVehiculo(
+  id: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const res = await fetchWithSupabaseSession(
+      `/api/vehiculos/${encodeURIComponent(id)}/imagen`,
+      { method: "DELETE" }
+    );
+    const json = (await res.json().catch(() => ({}))) as Resp<unknown>;
+    if (!res.ok || !json.success) {
+      return { ok: false, error: json.error ?? "No se pudo quitar la foto." };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Error de red." };
+  }
+}
+
 export async function crearVehiculo(
   input: NuevoVehiculoInput
 ): Promise<{ ok: true; vehiculo: Vehiculo } | { ok: false; error: string }> {

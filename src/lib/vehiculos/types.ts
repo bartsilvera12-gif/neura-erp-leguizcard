@@ -41,6 +41,11 @@ export interface Vehiculo {
   aceite_tipo: string | null;
   /** Cuantos litros lleva un cambio completo. */
   aceite_litros: number | null;
+  /**
+   * URL FIRMADA de la foto, con vencimiento. No se guarda en la base: se firma
+   * al leer, porque el bucket es privado. null = sin foto.
+   */
+  imagen_url?: string | null;
   observaciones: string | null;
   activo: boolean;
   created_at: string;

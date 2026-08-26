@@ -3,6 +3,7 @@ import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
+import { signVehiculoImagenes } from "@/lib/vehiculos/imagen-storage";
 import {
   listVehiculos,
   insertVehiculo,
@@ -30,6 +31,9 @@ export function mapVehiculoRow(r: VehiculoRow): Vehiculo {
     color: r.color,
     km_actual: r.km_actual != null ? Number(r.km_actual) : null,
     km_actualizado_at: r.km_actualizado_at,
+    // La URL firmada la agrega quien llama: firmar de a una seria un roundtrip
+    // por vehiculo en un listado de cientos.
+    imagen_url: null,
     aceite_tipo: r.aceite_tipo,
     aceite_litros: r.aceite_litros != null ? Number(r.aceite_litros) : null,
     observaciones: r.observaciones,
@@ -58,7 +62,16 @@ export async function GET(request: NextRequest) {
       soloActivos: sp.get("activos") === "1",
       clienteId: sp.get("cliente_id"),
     });
-    return NextResponse.json(successResponse({ vehiculos: rows.map(mapVehiculoRow) }));
+    // Las fotos se firman en lote: de a una seria un roundtrip por vehiculo.
+    const firmas = await signVehiculoImagenes(
+      ctx.supabase,
+      rows.map((r) => r.imagen_path).filter((p): p is string => !!p)
+    );
+    const vehiculos = rows.map((r) => ({
+      ...mapVehiculoRow(r),
+      imagen_url: r.imagen_path ? firmas.get(r.imagen_path) ?? null : null,
+    }));
+    return NextResponse.json(successResponse({ vehiculos }));
   } catch (err) {
     console.error("[/api/vehiculos GET]", err instanceof Error ? err.message : err);
     return NextResponse.json(errorResponse("No se pudieron cargar los vehículos."), { status: 500 });

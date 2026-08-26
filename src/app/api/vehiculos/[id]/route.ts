@@ -14,6 +14,7 @@ import {
 } from "@/lib/vehiculos/server/vehiculos-pg";
 import { listEstadoServiciosDeVehiculo } from "@/lib/vehiculos/server/proximos-servicios-pg";
 import { mapVehiculoRow } from "../route";
+import { signVehiculoImagen } from "@/lib/vehiculos/imagen-storage";
 import {
   COMBUSTIBLES,
   type Combustible,
@@ -37,6 +38,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
 
     const row = await getVehiculo(schema, ctx.auth.empresa_id, id);
     if (!row) return NextResponse.json(errorResponse("Vehículo no encontrado."), { status: 404 });
+    const imagenUrl = await signVehiculoImagen(ctx.supabase, row.imagen_path);
 
     const [servRows, estadoRows, ventasAsociadas] = await Promise.all([
       listServiciosDeVehiculo(schema, ctx.auth.empresa_id, id),
@@ -81,7 +83,12 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
     }));
 
     return NextResponse.json(
-      successResponse({ vehiculo: mapVehiculoRow(row), servicios, proximos, ventasAsociadas })
+      successResponse({
+        vehiculo: { ...mapVehiculoRow(row), imagen_url: imagenUrl },
+        servicios,
+        proximos,
+        ventasAsociadas,
+      })
     );
   } catch (err) {
     console.error("[/api/vehiculos/[id] GET]", err instanceof Error ? err.message : err);

@@ -102,13 +102,20 @@ function cteServiciosYUltimo(
          AND (p.servicio_intervalo_km IS NOT NULL OR p.servicio_intervalo_meses IS NOT NULL)
     ),
     ultimo AS (
-      -- Ultima vez que cada servicio se hizo sobre cada vehiculo.
+      -- Ultima vez que cada producto de mantenimiento se le puso a cada vehiculo.
+      --
+      -- Solo cuentan las ventas con kilometraje cargado, igual que el historial
+      -- de la ficha. Ademas de ser la misma regla, evita un problema real: una
+      -- venta posterior SIN km pisaba a la anterior CON km (el DISTINCT ON se
+      -- queda con la mas reciente), ultimo_km salia NULL y el aviso por
+      -- kilometraje se apagaba sin que nadie se enterara.
       SELECT DISTINCT ON (v.vehiculo_id, i.producto_id)
              v.vehiculo_id, i.producto_id, v.fecha AS ultima_fecha, v.km_registrado AS ultimo_km
         FROM ${tVen} v
         JOIN ${tIt} i ON i.venta_id = v.id AND i.empresa_id = v.empresa_id
        WHERE v.empresa_id = $1::uuid
          AND v.vehiculo_id IS NOT NULL
+         AND v.km_registrado IS NOT NULL
          AND v.estado <> 'anulada'
          AND i.producto_id IN (SELECT id FROM servicios)
          ${filtroVehiculo}

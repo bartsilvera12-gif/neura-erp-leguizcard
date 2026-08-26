@@ -318,11 +318,23 @@ export default function VehiculoDetallePage({ params }: { params: Promise<{ id: 
           Historial de servicios
           <span className="text-xs font-normal text-slate-400">({servicios.length})</span>
         </h2>
+        {servicios.length > 0 && (
+          <p className="mt-0.5 text-[11px] text-slate-400">
+            Solo las ventas en las que se registró el kilometraje.
+          </p>
+        )}
 
         {servicios.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-400">
-            Todavía no hay servicios registrados para este vehículo.
-          </p>
+          <div className="py-8 text-center">
+            <p className="text-sm text-slate-400">
+              Todavía no hay servicios registrados para este vehículo.
+            </p>
+            <p className="mx-auto mt-1.5 max-w-md text-xs text-slate-400">
+              Una atención entra acá cuando se factura con este vehículo elegido{" "}
+              <strong className="font-semibold text-slate-500">y con el kilometraje cargado</strong>.
+              Esa lectura es la que permite calcular el próximo mantenimiento.
+            </p>
+          </div>
         ) : (
           <ul className="mt-4 space-y-3">
             {servicios.map((s) => (

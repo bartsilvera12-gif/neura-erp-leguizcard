@@ -1408,7 +1408,9 @@ export default function NuevaVentaPage() {
                     </p>
                   ) : (
                     <p className="mt-1 text-[11px] text-gray-400">
-                      Queda en el historial del vehículo y define cuándo toca el próximo servicio.
+                      <strong className="font-semibold text-slate-600">Sin este dato la venta no
+                      entra al historial del vehículo</strong>, y no se puede calcular cuándo le
+                      toca el próximo mantenimiento.
                     </p>
                   )}
                 </div>

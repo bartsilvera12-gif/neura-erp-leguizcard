@@ -254,9 +254,15 @@ export interface ServicioVehiculoRow {
 
 /**
  * Historial de atenciones del vehiculo, de la mas reciente a la mas vieja,
- * con el detalle de cada una: que servicio se hizo, que insumos se usaron y
- * en que cantidad. Es lo que se mira cuando el cliente pregunta que le
- * pusieron la vez pasada.
+ * con el detalle de cada una: que se le hizo, que se le puso y en que
+ * cantidad. Es lo que se mira cuando el cliente pregunta que le pusieron la
+ * vez pasada.
+ *
+ * Solo entran las ventas donde el cajero cargo el kilometraje. Esa lectura es
+ * la que marca que el auto realmente paso por el taller: sin ella no se puede
+ * calcular cuando toca el proximo mantenimiento, y la venta seria una linea
+ * muerta en la ficha. Una venta de mostrador con el auto elegido pero sin
+ * odometro queda fuera, que es lo correcto.
  */
 export async function listServiciosDeVehiculo(
   schemaRaw: string,
@@ -302,6 +308,7 @@ export async function listServiciosDeVehiculo(
             ), '[]'::json) AS items
        FROM ${tV} v
       WHERE v.empresa_id = $1::uuid AND v.vehiculo_id = $2::uuid
+        AND v.km_registrado IS NOT NULL
       ORDER BY v.fecha DESC, v.numero_control DESC
       LIMIT 500`,
     [empresaId, vehiculoId]

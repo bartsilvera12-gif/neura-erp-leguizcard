@@ -32,6 +32,7 @@ export interface VehiculoRow {
   aceite_tipo: string | null;
   aceite_litros: string | number | null;
   imagen_path: string | null;
+  ultima_visita: string | null;
   observaciones: string | null;
   activo: boolean;
   created_at: string;
@@ -49,6 +50,20 @@ const COLS = `v.id::text AS id, v.empresa_id::text AS empresa_id, v.cliente_id::
               v.patente, v.marca, v.modelo, v.anio, v.motor, v.combustible, v.vin, v.color,
               v.km_actual, v.km_actualizado_at, v.aceite_tipo, v.aceite_litros,
               v.imagen_path, v.observaciones, v.activo, v.created_at, v.updated_at`;
+
+/**
+ * Ultima vez que el auto paso por el taller. Va como subconsulta y no como JOIN
+ * para no multiplicar filas ni obligar a un GROUP BY de todas las columnas.
+ */
+function colUltimaVisita(schema: string): string {
+  const tVV = quoteSchemaTable(schema, "ventas_vehiculos");
+  const tVen = quoteSchemaTable(schema, "ventas");
+  return `, (SELECT MAX(ven.fecha)::text
+               FROM ${tVV} vv
+               JOIN ${tVen} ven ON ven.id = vv.venta_id AND ven.empresa_id = vv.empresa_id
+              WHERE vv.vehiculo_id = v.id AND vv.empresa_id = v.empresa_id
+                AND ven.estado <> 'anulada') AS ultima_visita`;
+}
 
 function from(schema: string): string {
   return `${quoteSchemaTable(schema, "vehiculos")} v
@@ -70,7 +85,7 @@ export async function listVehiculos(
     where.push(`v.cliente_id = $${args.length}::uuid`);
   }
   const { rows } = await pool().query<VehiculoRow>(
-    `SELECT ${COLS} FROM ${from(schema)}
+    `SELECT ${COLS}${colUltimaVisita(schema)} FROM ${from(schema)}
       WHERE ${where.join(" AND ")}
       ORDER BY v.activo DESC, v.patente ASC
       LIMIT 5000`,
@@ -86,7 +101,7 @@ export async function getVehiculo(
 ): Promise<VehiculoRow | null> {
   const schema = assertAllowedChatDataSchema(schemaRaw);
   const { rows } = await pool().query<VehiculoRow>(
-    `SELECT ${COLS} FROM ${from(schema)}
+    `SELECT ${COLS}${colUltimaVisita(schema)} FROM ${from(schema)}
       WHERE v.empresa_id = $1::uuid AND v.id = $2::uuid LIMIT 1`,
     [empresaId, id]
   );
@@ -101,7 +116,7 @@ export async function findVehiculoByPatente(
 ): Promise<VehiculoRow | null> {
   const schema = assertAllowedChatDataSchema(schemaRaw);
   const { rows } = await pool().query<VehiculoRow>(
-    `SELECT ${COLS} FROM ${from(schema)}
+    `SELECT ${COLS}${colUltimaVisita(schema)} FROM ${from(schema)}
       WHERE v.empresa_id = $1::uuid
         AND upper(regexp_replace(v.patente, '[^A-Za-z0-9]', '', 'g')) = upper(regexp_replace($2, '[^A-Za-z0-9]', '', 'g'))
       LIMIT 1`,

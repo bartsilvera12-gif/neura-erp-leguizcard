@@ -46,6 +46,8 @@ export interface Vehiculo {
    * al leer, porque el bucket es privado. null = sin foto.
    */
   imagen_url?: string | null;
+  /** Ultima vez que el auto paso por el taller. Solo lectura. */
+  ultima_visita?: string | null;
   observaciones: string | null;
   activo: boolean;
   created_at: string;

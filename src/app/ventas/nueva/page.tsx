@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Search, Plus, Minus, Trash2, ImageIcon, Wallet, Car, AlertTriangle, Loader2 } from "lucide-react";
 import MontoInput from "@/components/ui/MontoInput";
 import { FancySelect } from "@/components/ui/FancySelect";
@@ -9,7 +10,8 @@ import ProductPickerModal, { type ProductoPickerItem, type AgregarVentaPayload }
 import { saveVenta, type FaltanteStock } from "@/lib/ventas/storage";
 import { getProductos } from "@/lib/inventario/storage";
 import CrearClienteModal, { type ClienteCreado } from "@/components/clientes/CrearClienteModal";
-import { crearVehiculo, getVehiculos } from "@/lib/vehiculos/storage";
+import { getVehiculos } from "@/lib/vehiculos/storage";
+import BuscadorVehiculo from "@/components/vehiculos/BuscadorVehiculo";
 import { normalizarPatente, type Vehiculo } from "@/lib/vehiculos/types";
 import { generarYAbrirRecibo } from "@/lib/recibos/client";
 import type { TipoIvaVenta, TipoVenta, MonedaVenta, LineaVenta, MetodoPago, TipoPrecioVenta } from "@/lib/ventas/types";
@@ -185,16 +187,17 @@ export default function NuevaVentaPage() {
   // En un lubricentro entra el AUTO, no la persona: se busca por patente y el
   // cliente sale de ahi. Por eso la lista no se acota al cliente elegido.
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
-  const [vehiculoId, setVehiculoId] = useState("");
-  const [vehiculoQuery, setVehiculoQuery] = useState("");
-  const [vehiculoOpen, setVehiculoOpen] = useState(false);
-  const vehiculoContainerRef = useRef<HTMLDivElement>(null);
-  const [kmRegistrado, setKmRegistrado] = useState("");
-  // Alta rapida: la mayoria de los autos no van a estar cargados todavia, y
-  // mandar al cajero a otra pantalla en medio de la venta pierde el carrito.
-  const [altaVehiculo, setAltaVehiculo] = useState<{ patente: string; marca: string; modelo: string } | null>(null);
-  const [creandoVehiculo, setCreandoVehiculo] = useState(false);
-  const [errorVehiculo, setErrorVehiculo] = useState<string | null>(null);
+  /** Un vehiculo cargado en la venta, con su propia lectura de odometro. */
+  type VehiculoEnVenta = { vehiculo_id: string; km: string };
+  const [vehiculosVenta, setVehiculosVenta] = useState<VehiculoEnVenta[]>([]);
+  const [buscadorVehAbierto, setBuscadorVehAbierto] = useState(false);
+  /**
+   * Que bloque tiene el buscador de productos activo. El motor de busqueda es
+   * uno solo (hace consultas al servidor con debounce); duplicarlo por bloque
+   * multiplicaria los pedidos sin ninguna ganancia, porque solo uno se usa a
+   * la vez. null = el bloque sin vehiculo.
+   */
+  const [comboVehiculo, setComboVehiculo] = useState<string | null>(null);
 
   // Modal de alta rápida de cliente (crea en el módulo Clientes + lo selecciona).
   const [showCrearCliente, setShowCrearCliente] = useState(false);
@@ -330,6 +333,9 @@ export default function NuevaVentaPage() {
       ...prev,
       {
         producto_id: p.id,
+        // El buscador avanzado carga sobre el bloque activo, igual que el
+        // buscador rapido.
+        vehiculo_id: comboVehiculo,
         producto_nombre: p.nombre,
         sku: p.sku,
         cantidad,
@@ -590,6 +596,15 @@ export default function NuevaVentaPage() {
     try { if (cajaActivaId) localStorage.setItem("caja_activa_id", cajaActivaId); } catch { /* noop */ }
   }, [cajaActivaId]);
 
+  /**
+   * Al cambiar de bloque activo, el foco salta a SU buscador. Sin esto, agregar
+   * un vehiculo te deja escribiendo en el buscador del bloque anterior.
+   */
+  useEffect(() => {
+    const t = setTimeout(() => comboInputRef.current?.focus(), 60);
+    return () => clearTimeout(t);
+  }, [comboVehiculo]);
+
   // Cerrar dropdown al hacer clic fuera
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -598,9 +613,6 @@ export default function NuevaVentaPage() {
       }
       if (clienteContainerRef.current && !clienteContainerRef.current.contains(e.target as Node)) {
         setClienteOpen(false);
-      }
-      if (vehiculoContainerRef.current && !vehiculoContainerRef.current.contains(e.target as Node)) {
-        setVehiculoOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -625,45 +637,41 @@ export default function NuevaVentaPage() {
   const plazoDiasNum = parseInt(plazoDias) || 0;
   const creditoValido = tipoVenta === "CONTADO" || (plazoDiasNum >= 1 && !!clienteId);
   // ── Vehiculo: seleccion, busqueda y reglas ────────────────────────────────
-  const vehiculoSel = vehiculos.find((v) => v.id === vehiculoId) ?? null;
+  /** Los vehiculos de la venta, resueltos y en el orden en que se cargaron. */
+  const autosVenta = vehiculosVenta
+    .map((vv) => {
+      const veh = vehiculos.find((x) => x.id === vv.vehiculo_id);
+      return veh ? { ...vv, veh } : null;
+    })
+    .filter((x): x is { vehiculo_id: string; km: string; veh: Vehiculo } => x !== null);
 
-  /** El odometro no retrocede: si la lectura es menor, el backend la ignora. */
-  const kmNum = kmRegistrado.trim() === "" ? null : Number(kmRegistrado);
-  const kmRetrocede =
-    kmNum != null &&
-    Number.isFinite(kmNum) &&
-    vehiculoSel?.km_actual != null &&
-    kmNum < vehiculoSel.km_actual;
+  /** Lineas sin vehiculo: venta de mostrador, o algo general dentro de una venta con autos. */
+  const itemsSinVehiculo = items
+    .map((it, idx) => ({ it, idx }))
+    .filter(({ it }) => !it.vehiculo_id);
 
-  /** El auto esta a nombre de otro cliente que el elegido en la venta. */
-  const vehiculoDeOtroCliente =
-    !!vehiculoSel?.cliente_id && !!clienteId && vehiculoSel.cliente_id !== clienteId;
+  const itemsDe = (vehId: string) =>
+    items.map((it, idx) => ({ it, idx })).filter(({ it }) => it.vehiculo_id === vehId);
 
-  const vehiculosFiltrados = (() => {
-    const q = vehiculoQuery.trim();
-    const base = q === ""
-      ? vehiculos
-      : vehiculos.filter((v) => {
-          // La patente se compara normalizada: "ABC 123" encuentra "abc-123".
-          const pat = normalizarPatente(v.patente);
-          if (pat.includes(normalizarPatente(q))) return true;
-          const texto = [v.marca, v.modelo, v.cliente_nombre].filter(Boolean).join(" ");
-          return productoMatchesQuery(q, texto, null);
-        });
-    // Con cliente elegido, sus autos primero: casi siempre es uno de esos.
-    if (!clienteId) return base.slice(0, 50);
-    return [...base]
-      .sort((a, b) => Number(b.cliente_id === clienteId) - Number(a.cliente_id === clienteId))
-      .slice(0, 50);
-  })();
+  const totalDe = (vehId: string) =>
+    items.reduce((sum, it) => (it.vehiculo_id === vehId ? sum + it.total_linea : sum), 0);
 
-  /** Al elegir el auto, si la venta no tiene cliente se completa con el dueño. */
-  function elegirVehiculo(v: Vehiculo) {
-    setVehiculoId(v.id);
-    setVehiculoQuery("");
-    setVehiculoOpen(false);
-    setErrorVehiculo(null);
-    setKmRegistrado("");
+  /** El odometro no retrocede: si la lectura es menor, el backend la descarta. */
+  function kmRetrocede(km: string, veh: Vehiculo): boolean {
+    const n = km.trim() === "" ? null : Number(km);
+    return n != null && Number.isFinite(n) && veh.km_actual != null && n < veh.km_actual;
+  }
+
+  /**
+   * Suma el auto a la venta. Si la venta todavia no tiene cliente, se completa
+   * con el dueno del auto: en un lubricentro entra el vehiculo, no la persona.
+   */
+  function agregarVehiculo(v: Vehiculo) {
+    setVehiculosVenta((prev) =>
+      prev.some((x) => x.vehiculo_id === v.id) ? prev : [...prev, { vehiculo_id: v.id, km: "" }]
+    );
+    setBuscadorVehAbierto(false);
+    setComboVehiculo(v.id);
     if (!clienteId && v.cliente_id) {
       const c = clientes.find((x) => x.id === v.cliente_id);
       if (c) {
@@ -674,37 +682,19 @@ export default function NuevaVentaPage() {
     }
   }
 
-  function limpiarVehiculo() {
-    setVehiculoId("");
-    setVehiculoQuery("");
-    setKmRegistrado("");
-    setErrorVehiculo(null);
+  /**
+   * Saca el auto de la venta. Sus productos NO se borran: pasan al bloque sin
+   * vehiculo, a la vista y reasignables. Borrarlos en silencio seria tirar lo
+   * que el cajero ya cargo.
+   */
+  function quitarVehiculo(id: string) {
+    setVehiculosVenta((prev) => prev.filter((x) => x.vehiculo_id !== id));
+    setItems((prev) => prev.map((it) => (it.vehiculo_id === id ? { ...it, vehiculo_id: null } : it)));
+    setComboVehiculo((prev) => (prev === id ? null : prev));
   }
 
-  /** Alta rapida: solo lo indispensable, el resto se completa despues. */
-  async function guardarVehiculoNuevo() {
-    if (!altaVehiculo) return;
-    const patente = altaVehiculo.patente.trim();
-    if (normalizarPatente(patente).length < 3) {
-      setErrorVehiculo("La patente es muy corta.");
-      return;
-    }
-    setCreandoVehiculo(true);
-    setErrorVehiculo(null);
-    const r = await crearVehiculo({
-      patente,
-      marca: altaVehiculo.marca.trim() || null,
-      modelo: altaVehiculo.modelo.trim() || null,
-      cliente_id: clienteId || null,
-    });
-    setCreandoVehiculo(false);
-    if (!r.ok) {
-      setErrorVehiculo(r.error);
-      return;
-    }
-    setVehiculos((prev) => [r.vehiculo, ...prev.filter((v) => v.id !== r.vehiculo.id)]);
-    setAltaVehiculo(null);
-    elegirVehiculo(r.vehiculo);
+  function setKmVehiculo(id: string, km: string) {
+    setVehiculosVenta((prev) => prev.map((x) => (x.vehiculo_id === id ? { ...x, km } : x)));
   }
 
   const ventaValida   = items.length > 0 && creditoValido;
@@ -841,7 +831,12 @@ export default function NuevaVentaPage() {
   function agregarProductoRapido(p: Producto) {
     const precio = precioPorTipo(p, "minorista");
     setItems((prev) => {
-      const idx = prev.findIndex((it) => it.producto_id === p.id && !it.presentacion_id);
+      const idx = prev.findIndex(
+        (it) =>
+          it.producto_id === p.id &&
+          !it.presentacion_id &&
+          (it.vehiculo_id ?? null) === comboVehiculo
+      );
       if (idx >= 0) {
         return prev.map((it, i) => (i === idx ? recomputeLinea({ ...it, cantidad: it.cantidad + 1 }) : it));
       }
@@ -849,6 +844,7 @@ export default function NuevaVentaPage() {
         ...prev,
         recomputeLinea({
           producto_id: p.id,
+          vehiculo_id: comboVehiculo,
           producto_nombre: p.nombre,
           sku: p.sku,
           cantidad: 1,
@@ -1028,9 +1024,10 @@ export default function NuevaVentaPage() {
           permitirSinStock, pedidoId, pedidoCajaId, cajaId: cajaActivaFinal,
           // La venta ya soporta varios vehiculos; esta pantalla todavia carga
           // uno solo, asi que manda un arreglo de uno.
-          vehiculos: vehiculoId
-            ? [{ vehiculo_id: vehiculoId, km_registrado: kmRegistrado ? Number(kmRegistrado) : null }]
-            : [],
+          vehiculos: vehiculosVenta.map((v) => ({
+            vehiculo_id: v.vehiculo_id,
+            km_registrado: v.km.trim() === "" ? null : Number(v.km),
+          })),
           usarSaldoFavor: saldoAplicado,
           retirarSaldoEfectivo: retirarExcedente ? saldoRestante : 0,
           pagos: metodoPago === "mixto"
@@ -1112,6 +1109,227 @@ export default function NuevaVentaPage() {
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
+
+  /**
+   * Una fila del carrito. Se extrajo del render para poder usarla igual en
+   * la venta plana (sin vehiculos) y dentro del bloque de cada vehiculo.
+   *
+   * `idx` es la posicion en `items`, no en la lista visible: los handlers
+   * (cantidad, precio, eliminar) trabajan sobre el arreglo completo.
+   */
+  function filaItem(item: LineaVenta, idx: number) {
+                  const prod = productos.find((p) => p.id === item.producto_id);
+                  const controla = prod ? prod.controla_stock !== false : true;
+                  const stock = prod?.stock_actual ?? 0;
+                  const stockBajo = controla && item.cantidad > stock;
+                  return (
+                    <tr key={idx} className="align-middle transition-colors hover:bg-[#0EA5E9]/5">
+                      {/* Producto + SKU */}
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-3">
+                          <ProductoThumb url={prod?.imagen_url} alt={item.producto_nombre} />
+                          <div className="min-w-0">
+                            <p className="font-semibold text-slate-900 leading-snug">{item.producto_nombre}</p>
+                            <p className="font-mono text-[11px] text-slate-500">{item.sku}</p>
+                            {item.presentacion_nombre && (
+                              <p className="text-[11px] text-slate-500">
+                                {item.presentacion_nombre}
+                                {item.presentacion_cantidad_base != null && item.presentacion_cantidad_base !== 1
+                                  ? ` = ${item.cantidad * item.presentacion_cantidad_base}` : ""}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      {/* Tipo de precio */}
+                      <td className="hidden px-3 py-2.5 md:table-cell">
+                        <div className="inline-flex overflow-hidden rounded-lg border border-slate-200">
+                          {(["minorista", "mayorista", "distribuidor"] as const).map((tp) => {
+                            const sel = (item.tipo_precio ?? "minorista") === tp;
+                            return (
+                              <button key={tp} type="button" onClick={() => changeTipoPrecioItem(idx, tp)}
+                                className={`px-2 py-1.5 text-[11px] font-semibold transition-colors ${sel ? "bg-[#0EA5E9] text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>
+                                {tp === "minorista" ? "Min" : tp === "mayorista" ? "May" : "Dist"}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </td>
+                      {/* IVA */}
+                      <td className="hidden px-3 py-2.5 md:table-cell">
+                        <div className="inline-flex overflow-hidden rounded-lg border border-slate-200">
+                          {(["EXENTA", "5%", "10%"] as const).map((iva) => {
+                            const sel = item.tipo_iva === iva;
+                            return (
+                              <button key={iva} type="button" onClick={() => updateItemCampo(idx, { tipo_iva: iva })}
+                                className={`px-2 py-1.5 text-[11px] font-semibold transition-colors ${sel ? "bg-[#0EA5E9] text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>
+                                {iva === "EXENTA" ? "Ex" : iva}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </td>
+                      {/* Cantidad */}
+                      <td className="px-3 py-2.5">
+                        <div className="mx-auto flex w-fit items-center rounded-md border border-slate-200 bg-white">
+                          <button type="button" onClick={() => changeCantidadItem(idx, -1)} className="h-8 w-8 rounded-l-md text-slate-500 hover:bg-slate-100"><Minus className="mx-auto h-3.5 w-3.5" /></button>
+                          <CantidadInput
+                            value={item.cantidad}
+                            unidad={item.unidad_medida}
+                            onChange={(n) => updateItemCampo(idx, { cantidad: n })}
+                            className={`h-8 text-center text-sm tabular-nums outline-none ${
+                              permiteDecimales(item.unidad_medida) ? "w-16" : "w-12"
+                            }`}
+                          />
+                          <button type="button" onClick={() => changeCantidadItem(idx, 1)} className="h-8 w-8 rounded-r-md text-slate-500 hover:bg-slate-100"><Plus className="mx-auto h-3.5 w-3.5" /></button>
+                        </div>
+                        {permiteDecimales(item.unidad_medida) && (
+                          <p className="mt-0.5 text-center text-[10px] font-semibold uppercase text-[#3F8E91]">
+                            {item.unidad_medida}
+                          </p>
+                        )}
+                      </td>
+                      {/* Precio unitario editable */}
+                      <td className="px-3 py-2.5 text-right">
+                        <input
+                          type="number" min={0} value={item.precio_venta}
+                          onChange={(e) => updateItemCampo(idx, { precio_venta: Math.max(0, Number(e.target.value) || 0), precio_venta_original: Math.max(0, Number(e.target.value) || 0), precio_manual: true })}
+                          className="h-8 w-28 rounded-md border border-slate-200 bg-white px-2 text-right text-sm tabular-nums"
+                        />
+                      </td>
+                      {/* Stock */}
+                      <td className="px-3 py-2.5 text-right">
+                        <span className={`text-xs font-semibold tabular-nums ${!controla ? "text-slate-400" : stockBajo ? "text-red-600" : "text-slate-600"}`}>
+                          {!controla ? "—" : stock}
+                        </span>
+                      </td>
+                      {/* Subtotal (total de línea) */}
+                      <td className="px-3 py-2.5 text-right">
+                        <span className="text-sm font-bold tabular-nums text-slate-900">{formatGs(item.total_linea)}</span>
+                      </td>
+                      {/* Quitar */}
+                      <td className="px-2 py-2.5 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleEliminarLinea(idx)}
+                          className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                          title="Quitar producto"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+    );
+  }
+
+
+  /**
+   * Buscador de productos de un bloque. Se dibuja uno por vehiculo, pero el
+   * motor de busqueda es unico: solo el bloque enfocado (`comboVehiculo`)
+   * tiene texto, los demas quedan vacios. Asi no se multiplican las consultas
+   * al servidor por algo que se usa de a uno.
+   */
+  function buscadorProductos(vehId: string | null) {
+    const activo = comboVehiculo === vehId;
+    const valor = activo ? comboQuery : "";
+    return (
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#0EA5E9]" />
+        <input
+          ref={activo ? comboInputRef : undefined}
+          type="text"
+          value={valor}
+          onChange={(e) => {
+            setComboVehiculo(vehId);
+            setComboQuery(e.target.value);
+            setComboOpen(true);
+            setComboHighlight(-1);
+          }}
+          onFocus={() => {
+            setComboVehiculo(vehId);
+            setComboOpen(true);
+          }}
+          onKeyDown={onComboKeyDown}
+          placeholder={vehId ? "Buscar producto para este vehículo…" : "Buscar producto por nombre, SKU o palabras clave…"}
+          className="h-11 w-full rounded-xl border-2 border-[#0EA5E9]/30 bg-white pl-12 pr-4 text-sm text-slate-800 outline-none transition-all focus:border-[#0EA5E9] focus:ring-4 focus:ring-[#0EA5E9]/15"
+          autoComplete="off"
+        />
+        {activo && comboOpen && comboQuery.trim().length >= 2 && (
+          <div className="absolute left-0 right-0 top-full z-30 mt-2 max-h-[46vh] overflow-y-auto rounded-xl border-2 border-[#0EA5E9]/20 bg-white shadow-[0_16px_40px_-12px_rgba(15,23,42,0.28)]">
+            {comboBuscando && comboResultados.length === 0 ? (
+              <div className="px-4 py-5 text-center text-sm text-slate-400">Buscando…</div>
+            ) : comboResultados.length === 0 ? (
+              <div className="px-4 py-5 text-center text-sm text-slate-400">Sin resultados para &quot;{comboQuery}&quot;.</div>
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {comboResultados.map((p, i) => {
+                  const sinStock = (p.stock_actual ?? 0) <= 0;
+                  return (
+                    <li key={p.id}>
+                      <button
+                        type="button"
+                        id={`combo-opt-${i}`}
+                        onMouseEnter={() => setComboHighlight(i)}
+                        onClick={() => agregarProductoRapido(p)}
+                        className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors ${i === comboHighlight ? "bg-[#0EA5E9]/8" : "hover:bg-slate-50"}`}
+                      >
+                        <ProductoThumb url={p.imagen_url} alt={p.nombre} />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-slate-800">{p.nombre}</p>
+                          <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
+                            <span className="font-mono">{p.sku}</span>
+                            <span className="text-slate-300">·</span>
+                            <span className={`font-semibold ${sinStock ? "text-red-600" : (p.stock_actual ?? 0) < 5 ? "text-amber-600" : "text-emerald-700"}`}>
+                              {sinStock ? "Sin stock" : formatStockConUnidad(p.stock_actual ?? 0, p.unidad_medida)}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="shrink-0 text-sm font-bold tabular-nums text-slate-800">{formatGs(precioPorTipo(p, "minorista"))}</span>
+                        <span className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-[#0EA5E9]/10 px-2.5 py-1 text-xs font-bold text-[#0284C7]">
+                          <Plus className="h-3.5 w-3.5" strokeWidth={2.5} /> Agregar
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+                {comboResultados.length >= 20 && (
+                  <li className="px-4 py-2 text-center text-[11px] text-slate-400">
+                    Mostrando los primeros 20. Refiná la búsqueda para acotar.
+                  </li>
+                )}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  /** La tabla del carrito para un subconjunto de lineas. */
+  function tablaItems(filas: { it: LineaVenta; idx: number }[]) {
+    if (filas.length === 0) return null;
+    return (
+      <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
+        <table className="w-full min-w-[820px] text-sm text-left">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <th className="px-3 py-2.5">Producto</th>
+              <th className="hidden px-3 py-2.5 md:table-cell">Precio</th>
+              <th className="hidden px-3 py-2.5 text-center md:table-cell">IVA</th>
+              <th className="px-3 py-2.5 text-center">Cant.</th>
+              <th className="px-3 py-2.5 text-right">Precio unit.</th>
+              <th className="px-3 py-2.5 text-right">Stock</th>
+              <th className="px-3 py-2.5 text-right">Subtotal</th>
+              <th className="w-10 px-2 py-2.5"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {filas.map(({ it, idx }) => filaItem(it, idx))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -1237,199 +1455,6 @@ export default function NuevaVentaPage() {
               )}
             </div>
 
-            {/* ── Vehiculo atendido (lubricentro) ────────────────────────────
-                Se busca por patente porque es lo que el cajero tiene en la mano
-                cuando el auto entra; el cliente se completa solo desde el auto. */}
-            <div ref={vehiculoContainerRef} className="relative">
-              <label className={labelClass}>
-                Vehículo <span className="text-xs font-normal text-gray-400">(opcional)</span>
-              </label>
-
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Car className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    value={vehiculoSel ? vehiculoSel.patente : vehiculoQuery}
-                    onChange={(e) => {
-                      if (vehiculoId) setVehiculoId("");
-                      setVehiculoQuery(e.target.value);
-                      setVehiculoOpen(true);
-                    }}
-                    onFocus={() => setVehiculoOpen(true)}
-                    placeholder="Buscar por patente, marca o cliente…"
-                    className={`${inputClass} pl-9 ${vehiculoSel ? "font-semibold uppercase tracking-wide" : ""}`}
-                  />
-                </div>
-                {vehiculoSel && (
-                  <button
-                    type="button"
-                    onClick={limpiarVehiculo}
-                    className="shrink-0 rounded-lg border border-slate-200 px-3 text-xs text-slate-500 hover:bg-slate-50"
-                  >
-                    Quitar
-                  </button>
-                )}
-              </div>
-
-              {/* Resultados de la busqueda */}
-              {vehiculoOpen && !vehiculoSel && !altaVehiculo && (
-                <div className="absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-                  {vehiculosFiltrados.map((v) => (
-                    <button
-                      key={v.id}
-                      type="button"
-                      onClick={() => elegirVehiculo(v)}
-                      className="block w-full px-3 py-2 text-left hover:bg-slate-50"
-                    >
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="font-mono text-sm font-semibold uppercase text-slate-800">{v.patente}</span>
-                        {v.km_actual != null && (
-                          <span className="shrink-0 font-mono text-[11px] text-slate-400">
-                            {Math.round(v.km_actual).toLocaleString("es-PY")} km
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-500">
-                        {[v.marca, v.modelo].filter(Boolean).join(" ") || "Sin marca ni modelo"}
-                        {v.cliente_nombre && <span className="text-slate-400"> · {v.cliente_nombre}</span>}
-                      </p>
-                    </button>
-                  ))}
-
-                  {/* El auto que no esta cargado se crea sin salir de la venta:
-                      mandar al cajero a otra pantalla le vacia el carrito. */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAltaVehiculo({ patente: vehiculoQuery.trim().toUpperCase(), marca: "", modelo: "" });
-                      setVehiculoOpen(false);
-                    }}
-                    className="flex w-full items-center gap-2 border-t border-slate-100 bg-slate-50/60 px-3 py-2 text-left text-xs font-semibold text-[#0284C7] hover:bg-slate-100"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    {vehiculoQuery.trim()
-                      ? `Cargar el vehículo "${vehiculoQuery.trim().toUpperCase()}"`
-                      : "Cargar un vehículo nuevo"}
-                  </button>
-                </div>
-              )}
-
-              {/* Alta rapida en linea */}
-              {altaVehiculo && (
-                <div className="mt-2 rounded-lg border border-[#0EA5E9]/40 bg-[#0EA5E9]/[0.05] p-3">
-                  <p className="mb-2 text-xs font-semibold text-[#0284C7]">Vehículo nuevo</p>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    <input
-                      autoFocus
-                      value={altaVehiculo.patente}
-                      onChange={(e) => setAltaVehiculo({ ...altaVehiculo, patente: e.target.value.toUpperCase() })}
-                      placeholder="Patente"
-                      className={`${inputClass} font-mono font-semibold uppercase`}
-                    />
-                    <input
-                      value={altaVehiculo.marca}
-                      onChange={(e) => setAltaVehiculo({ ...altaVehiculo, marca: e.target.value })}
-                      placeholder="Marca"
-                      className={inputClass}
-                    />
-                    <input
-                      value={altaVehiculo.modelo}
-                      onChange={(e) => setAltaVehiculo({ ...altaVehiculo, modelo: e.target.value })}
-                      placeholder="Modelo"
-                      className={inputClass}
-                    />
-                  </div>
-                  {errorVehiculo && <p className="mt-1.5 text-[11px] text-red-600">{errorVehiculo}</p>}
-                  <p className="mt-1.5 text-[11px] text-slate-500">
-                    {clienteId
-                      ? "Queda asignado al cliente de esta venta."
-                      : "Queda sin cliente: se le puede asignar después desde su ficha."}
-                  </p>
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={guardarVehiculoNuevo}
-                      disabled={creandoVehiculo}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-[#0EA5E9] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50"
-                    >
-                      {creandoVehiculo && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                      Guardar y usar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setAltaVehiculo(null); setErrorVehiculo(null); }}
-                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-white"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Confirmacion de que se agarro el auto correcto + odometro */}
-              {vehiculoSel && (
-                <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
-                  <p className="text-sm font-medium text-slate-800">
-                    {[vehiculoSel.marca, vehiculoSel.modelo].filter(Boolean).join(" ") || "Sin marca ni modelo"}
-                    {vehiculoSel.anio ? <span className="text-slate-400"> · {vehiculoSel.anio}</span> : null}
-                  </p>
-                  <p className="text-[11px] text-slate-500">
-                    {vehiculoSel.cliente_nombre ?? "Sin cliente asignado"}
-                    {vehiculoSel.km_actual != null && (
-                      <> · último odómetro <strong className="font-semibold text-slate-700">
-                        {Math.round(vehiculoSel.km_actual).toLocaleString("es-PY")} km
-                      </strong></>
-                    )}
-                  </p>
-
-                  {/* Que aceite lleva, a la vista al cargar la venta: evita
-                      preguntarle al mecanico o abrir la ficha en otra pestana. */}
-                  {(vehiculoSel.aceite_tipo || vehiculoSel.aceite_litros != null) && (
-                    <p className="mt-1 inline-flex items-center gap-1 rounded-md bg-[#4FAEB2]/10 px-2 py-0.5 text-[11px] font-semibold text-[#3F8E91]">
-                      Usa {vehiculoSel.aceite_tipo ?? "aceite sin especificar"}
-                      {vehiculoSel.aceite_litros != null && ` · ${vehiculoSel.aceite_litros} L`}
-                    </p>
-                  )}
-
-                  {vehiculoDeOtroCliente && (
-                    <p className="mt-1.5 flex items-start gap-1 text-[11px] text-amber-700">
-                      <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
-                      Este vehículo figura a nombre de otro cliente. La venta se registra igual.
-                    </p>
-                  )}
-
-                  <label className="mt-2 mb-1 block text-xs font-medium text-slate-600">
-                    Kilometraje de hoy
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={kmRegistrado}
-                    onChange={(e) => setKmRegistrado(e.target.value)}
-                    placeholder={vehiculoSel.km_actual != null ? String(Math.round(vehiculoSel.km_actual)) : "0"}
-                    className={`${inputClass} ${kmRetrocede ? "border-amber-400" : ""}`}
-                  />
-                  {kmRetrocede ? (
-                    // Sin aviso el cajero cree que la lectura se guardo, cuando
-                    // el backend la descarta por ser menor a la registrada.
-                    <p className="mt-1 flex items-start gap-1 text-[11px] text-amber-700">
-                      <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
-                      Es menor al último registrado. Queda en el historial de la venta, pero el
-                      odómetro del vehículo no se actualiza: no puede retroceder.
-                    </p>
-                  ) : (
-                    <p className="mt-1 text-[11px] text-gray-400">
-                      <strong className="font-semibold text-slate-600">Sin este dato la venta no
-                      entra al historial del vehículo</strong>, y no se puede calcular cuándo le
-                      toca el próximo mantenimiento.
-                    </p>
-                  )}
-                </div>
-              )}
-
-            </div>
-
             {/* Condición: Contado / Crédito */}
             <div>
               <label className={labelClass}>Condición</label>
@@ -1487,216 +1512,164 @@ export default function NuevaVentaPage() {
           )}
         </div>
 
-        {/* ── SECCIÓN 3: Carrito + totales + confirmar ─────────────────────── */}
+        {/* ── SECCIÓN 3: Carrito por vehículo + totales + confirmar ────────
+            En un lubricentro entra el AUTO: cada vehículo tiene su bloque con
+            su kilometraje y lo que se le puso. Sin vehículos el carrito es
+            plano, que es la venta de mostrador de siempre. */}
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 sm:p-6">
-          <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <SectionTitle>Productos en esta venta</SectionTitle>
-            <div className="flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setPickerOpen(true)}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-[#0EA5E9] hover:text-[#0284C7]"
-                title="Buscador avanzado (presentaciones, crear producto)"
-              >
-                Buscador avanzado
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setBuscadorVehAbierto(true)}
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#4FAEB2] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#3F8E91]"
+            >
+              <Car className="h-4 w-4" />
+              Añadir vehículo
+            </button>
           </div>
 
-          {/* Autocomplete compacto: al elegir un producto se agrega solo y se limpia. */}
-          <div ref={comboContainerRef} className="relative">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#0EA5E9]" />
-            <input
-              ref={comboInputRef}
-              type="text"
-              value={comboQuery}
-              onChange={(e) => { setComboQuery(e.target.value); setComboOpen(true); setComboHighlight(-1); }}
-              onFocus={() => setComboOpen(true)}
-              onKeyDown={onComboKeyDown}
-              placeholder="Buscar producto por nombre, SKU o palabras clave…"
-              className="h-12 w-full rounded-xl border-2 border-[#0EA5E9]/30 bg-white pl-12 pr-4 text-base text-slate-800 outline-none transition-all focus:border-[#0EA5E9] focus:ring-4 focus:ring-[#0EA5E9]/15"
-              autoComplete="off"
-            />
-            {comboOpen && comboQuery.trim().length >= 2 && (
-              <div className="absolute left-0 right-0 top-full z-30 mt-2 max-h-[56vh] overflow-y-auto rounded-xl border-2 border-[#0EA5E9]/20 bg-white shadow-[0_16px_40px_-12px_rgba(15,23,42,0.28)]">
-                {comboBuscando && comboResultados.length === 0 ? (
-                  <div className="px-4 py-5 text-center text-sm text-slate-400">Buscando…</div>
-                ) : comboResultados.length === 0 ? (
-                  <div className="px-4 py-5 text-center text-sm text-slate-400">Sin resultados para &quot;{comboQuery}&quot;.</div>
+          {/* ── Un bloque por vehículo ──────────────────────────────────── */}
+          {autosVenta.map(({ vehiculo_id, km, veh }) => {
+            const filas = itemsDe(vehiculo_id);
+            const retrocede = kmRetrocede(km, veh);
+            return (
+              <div
+                key={vehiculo_id}
+                className="mb-4 rounded-xl border border-[#4FAEB2]/40 bg-[#4FAEB2]/[0.04] p-4"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    {/* La foto identifica el auto sin leer la chapa. */}
+                    <div className="relative h-12 w-16 shrink-0 overflow-hidden rounded-lg bg-white">
+                      {veh.imagen_url ? (
+                        <Image src={veh.imagen_url} alt={veh.patente} fill sizes="64px" className="object-cover" unoptimized />
+                      ) : (
+                        <span className="flex h-full w-full items-center justify-center text-slate-300">
+                          <Car className="h-5 w-5" />
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-mono text-base font-bold uppercase tracking-wide text-slate-900">
+                        {veh.patente}
+                      </p>
+                      <p className="truncate text-xs text-slate-600">
+                        {[veh.marca, veh.modelo].filter(Boolean).join(" ") || "Sin marca ni modelo"}
+                        {veh.anio ? ` · ${veh.anio}` : ""}
+                        {veh.aceite_tipo ? ` · usa ${veh.aceite_tipo}` : ""}
+                        {veh.aceite_litros != null ? ` (${veh.aceite_litros} L)` : ""}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-end gap-2">
+                    <div>
+                      <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                        Kilometraje de hoy
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={km}
+                        onChange={(e) => setKmVehiculo(vehiculo_id, e.target.value)}
+                        placeholder={veh.km_actual != null ? String(Math.round(veh.km_actual)) : "0"}
+                        className={`h-9 w-32 rounded-lg border bg-white px-2 text-sm tabular-nums outline-none ${
+                          retrocede ? "border-amber-400" : "border-slate-200 focus:border-[#4FAEB2]"
+                        }`}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => quitarVehiculo(vehiculo_id)}
+                      className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-500 transition-colors hover:border-red-300 hover:text-red-600"
+                      title="Quitar este vehículo de la venta"
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                </div>
+
+                {retrocede ? (
+                  /* Sin aviso el cajero cree que la lectura se guardo, cuando el
+                     backend la descarta por ser menor a la registrada. */
+                  <p className="mt-1.5 flex items-start gap-1 text-[11px] text-amber-700">
+                    <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
+                    Es menor al último registrado ({veh.km_actual != null ? Math.round(veh.km_actual).toLocaleString("es-PY") : "—"} km).
+                    Queda en la venta, pero el odómetro del vehículo no retrocede.
+                  </p>
                 ) : (
-                  <ul className="divide-y divide-slate-100">
-                    {comboResultados.map((p, i) => {
-                      const sinStock = (p.stock_actual ?? 0) <= 0;
-                      return (
-                        <li key={p.id}>
-                          <button
-                            type="button"
-                            id={`combo-opt-${i}`}
-                            onMouseEnter={() => setComboHighlight(i)}
-                            onClick={() => agregarProductoRapido(p)}
-                            className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors ${i === comboHighlight ? "bg-[#0EA5E9]/8" : "hover:bg-slate-50"}`}
-                          >
-                            <ProductoThumb url={p.imagen_url} alt={p.nombre} />
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-semibold text-slate-800">{p.nombre}</p>
-                              <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
-                                <span className="font-mono">{p.sku}</span>
-                                <span className="text-slate-300">·</span>
-                                <span className={`font-semibold ${sinStock ? "text-red-600" : (p.stock_actual ?? 0) < 5 ? "text-amber-600" : "text-emerald-700"}`}>
-                                  {sinStock ? "Sin stock" : formatStockConUnidad(p.stock_actual ?? 0, p.unidad_medida)}
-                                </span>
-                              </div>
-                            </div>
-                            <span className="shrink-0 text-sm font-bold tabular-nums text-slate-800">{formatGs(precioPorTipo(p, "minorista"))}</span>
-                            <span className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-[#0EA5E9]/10 px-2.5 py-1 text-xs font-bold text-[#0284C7]">
-                              <Plus className="h-3.5 w-3.5" strokeWidth={2.5} /> Agregar
-                            </span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                    {comboResultados.length >= 20 && (
-                      <li className="px-4 py-2 text-center text-[11px] text-slate-400">
-                        Mostrando los primeros 20. Refiná la búsqueda para acotar.
-                      </li>
-                    )}
-                  </ul>
+                  <p className="mt-1.5 text-[11px] text-slate-500">
+                    Sin el kilometraje, esta atención no entra al historial del vehículo.
+                  </p>
+                )}
+
+                <div className="mt-3">{buscadorProductos(vehiculo_id)}</div>
+
+                {filas.length === 0 ? (
+                  <p className="mt-3 rounded-lg border border-dashed border-slate-200 bg-white/60 py-5 text-center text-xs text-slate-400">
+                    Buscá arriba lo que se le puso a este vehículo.
+                  </p>
+                ) : (
+                  <>
+                    {tablaItems(filas)}
+                    <div className="mt-2 flex justify-end text-sm">
+                      <span className="text-slate-500">Subtotal de {veh.patente}:&nbsp;</span>
+                      <span className="font-bold tabular-nums text-slate-800">
+                        {formatGs(totalDe(vehiculo_id))}
+                      </span>
+                    </div>
+                  </>
                 )}
               </div>
-            )}
-          </div>
+            );
+          })}
 
-          {items.length === 0 ? (
-            <div className="mt-4 py-10 text-center text-gray-400 text-sm border-2 border-dashed border-gray-200 rounded-lg">
-              Buscá un producto o servicio arriba y se agrega automáticamente a la venta.
-            </div>
-          ) : (
-            <>
-              {/* min-w fuerza scroll horizontal en mobile (8 columnas).
-                  Columnas secundarias (SKU, Subtotal, IVA Gs) se ocultan
-                  progresivamente: en mobile solo Producto/Cant/Precio/Total/eliminar. */}
-              <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-                <table className="w-full min-w-[820px] text-sm text-left">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                      <th className="px-3 py-3">Producto</th>
-                      <th className="hidden px-3 py-3 md:table-cell">Precio</th>
-                      <th className="hidden px-3 py-3 text-center md:table-cell">IVA</th>
-                      <th className="px-3 py-3 text-center">Cant.</th>
-                      <th className="px-3 py-3 text-right">Precio unit.</th>
-                      <th className="px-3 py-3 text-right">Stock</th>
-                      <th className="px-3 py-3 text-right">Subtotal</th>
-                      <th className="w-10 px-2 py-3"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {items.map((item, idx) => {
-                      const prod = productos.find((p) => p.id === item.producto_id);
-                      const controla = prod ? prod.controla_stock !== false : true;
-                      const stock = prod?.stock_actual ?? 0;
-                      const stockBajo = controla && item.cantidad > stock;
-                      return (
-                        <tr key={idx} className="align-middle transition-colors hover:bg-[#0EA5E9]/5">
-                          {/* Producto + SKU */}
-                          <td className="px-3 py-2.5">
-                            <div className="flex items-center gap-3">
-                              <ProductoThumb url={prod?.imagen_url} alt={item.producto_nombre} />
-                              <div className="min-w-0">
-                                <p className="font-semibold text-slate-900 leading-snug">{item.producto_nombre}</p>
-                                <p className="font-mono text-[11px] text-slate-500">{item.sku}</p>
-                                {item.presentacion_nombre && (
-                                  <p className="text-[11px] text-slate-500">
-                                    {item.presentacion_nombre}
-                                    {item.presentacion_cantidad_base != null && item.presentacion_cantidad_base !== 1
-                                      ? ` = ${item.cantidad * item.presentacion_cantidad_base}` : ""}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                          {/* Tipo de precio */}
-                          <td className="hidden px-3 py-2.5 md:table-cell">
-                            <div className="inline-flex overflow-hidden rounded-lg border border-slate-200">
-                              {(["minorista", "mayorista", "distribuidor"] as const).map((tp) => {
-                                const sel = (item.tipo_precio ?? "minorista") === tp;
-                                return (
-                                  <button key={tp} type="button" onClick={() => changeTipoPrecioItem(idx, tp)}
-                                    className={`px-2 py-1.5 text-[11px] font-semibold transition-colors ${sel ? "bg-[#0EA5E9] text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>
-                                    {tp === "minorista" ? "Min" : tp === "mayorista" ? "May" : "Dist"}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </td>
-                          {/* IVA */}
-                          <td className="hidden px-3 py-2.5 md:table-cell">
-                            <div className="inline-flex overflow-hidden rounded-lg border border-slate-200">
-                              {(["EXENTA", "5%", "10%"] as const).map((iva) => {
-                                const sel = item.tipo_iva === iva;
-                                return (
-                                  <button key={iva} type="button" onClick={() => updateItemCampo(idx, { tipo_iva: iva })}
-                                    className={`px-2 py-1.5 text-[11px] font-semibold transition-colors ${sel ? "bg-[#0EA5E9] text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>
-                                    {iva === "EXENTA" ? "Ex" : iva}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </td>
-                          {/* Cantidad */}
-                          <td className="px-3 py-2.5">
-                            <div className="mx-auto flex w-fit items-center rounded-md border border-slate-200 bg-white">
-                              <button type="button" onClick={() => changeCantidadItem(idx, -1)} className="h-8 w-8 rounded-l-md text-slate-500 hover:bg-slate-100"><Minus className="mx-auto h-3.5 w-3.5" /></button>
-                              <CantidadInput
-                                value={item.cantidad}
-                                unidad={item.unidad_medida}
-                                onChange={(n) => updateItemCampo(idx, { cantidad: n })}
-                                className={`h-8 text-center text-sm tabular-nums outline-none ${
-                                  permiteDecimales(item.unidad_medida) ? "w-16" : "w-12"
-                                }`}
-                              />
-                              <button type="button" onClick={() => changeCantidadItem(idx, 1)} className="h-8 w-8 rounded-r-md text-slate-500 hover:bg-slate-100"><Plus className="mx-auto h-3.5 w-3.5" /></button>
-                            </div>
-                            {permiteDecimales(item.unidad_medida) && (
-                              <p className="mt-0.5 text-center text-[10px] font-semibold uppercase text-[#3F8E91]">
-                                {item.unidad_medida}
-                              </p>
-                            )}
-                          </td>
-                          {/* Precio unitario editable */}
-                          <td className="px-3 py-2.5 text-right">
-                            <input
-                              type="number" min={0} value={item.precio_venta}
-                              onChange={(e) => updateItemCampo(idx, { precio_venta: Math.max(0, Number(e.target.value) || 0), precio_venta_original: Math.max(0, Number(e.target.value) || 0), precio_manual: true })}
-                              className="h-8 w-28 rounded-md border border-slate-200 bg-white px-2 text-right text-sm tabular-nums"
-                            />
-                          </td>
-                          {/* Stock */}
-                          <td className="px-3 py-2.5 text-right">
-                            <span className={`text-xs font-semibold tabular-nums ${!controla ? "text-slate-400" : stockBajo ? "text-red-600" : "text-slate-600"}`}>
-                              {!controla ? "—" : stock}
-                            </span>
-                          </td>
-                          {/* Subtotal (total de línea) */}
-                          <td className="px-3 py-2.5 text-right">
-                            <span className="text-sm font-bold tabular-nums text-slate-900">{formatGs(item.total_linea)}</span>
-                          </td>
-                          {/* Quitar */}
-                          <td className="px-2 py-2.5 text-center">
-                            <button
-                              type="button"
-                              onClick={() => handleEliminarLinea(idx)}
-                              className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
-                              title="Quitar producto"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+          {autosVenta.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setBuscadorVehAbierto(true)}
+              className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#4FAEB2]/50 py-3 text-sm font-semibold text-[#3F8E91] transition-colors hover:border-[#4FAEB2] hover:bg-[#4FAEB2]/[0.06]"
+            >
+              <Plus className="h-4 w-4" />
+              Añadir otro vehículo
+            </button>
+          )}
+
+          {/* ── Sin vehículo ────────────────────────────────────────────────
+              Con autos cargados solo aparece si tiene algo: no se le muestra al
+              cajero una caja vacía que no va a usar. Sin autos, es el carrito
+              de siempre. */}
+          {(autosVenta.length === 0 || itemsSinVehiculo.length > 0) && (
+            <div className={autosVenta.length > 0 ? "rounded-xl border border-slate-200 p-4" : ""}>
+              {autosVenta.length > 0 && (
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Sin vehículo asignado
+                </p>
+              )}
+              {buscadorProductos(null)}
+              <div className="mt-1.5 text-right">
+                <button
+                  type="button"
+                  onClick={() => { setComboVehiculo(null); setPickerOpen(true); }}
+                  className="text-[11px] font-medium text-slate-500 underline-offset-2 hover:text-[#0284C7] hover:underline"
+                  title="Presentaciones, crear producto"
+                >
+                  Buscador avanzado
+                </button>
               </div>
+              {itemsSinVehiculo.length === 0 ? (
+                <div className="mt-4 rounded-lg border-2 border-dashed border-gray-200 py-10 text-center text-sm text-gray-400">
+                  Buscá un producto arriba, o añadí un vehículo para cargarle lo que se le puso.
+                </div>
+              ) : (
+                tablaItems(itemsSinVehiculo)
+              )}
+            </div>
+          )}
+
+          {items.length > 0 && (
+            <>
 
               {/* Totales + Cobro (vuelto) */}
               <div className="mt-5 flex justify-end">
@@ -2004,6 +1977,16 @@ export default function NuevaVentaPage() {
         </div>
 
       </form>
+
+      {buscadorVehAbierto && (
+        <BuscadorVehiculo
+          vehiculos={vehiculos}
+          excluir={vehiculosVenta.map((v) => v.vehiculo_id)}
+          onElegir={agregarVehiculo}
+          onCreado={(v) => setVehiculos((prev) => [v, ...prev.filter((x) => x.id !== v.id)])}
+          onCerrar={() => setBuscadorVehAbierto(false)}
+        />
+      )}
 
       <ProductPickerModal
         open={pickerOpen}

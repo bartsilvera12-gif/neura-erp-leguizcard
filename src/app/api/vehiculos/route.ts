@@ -34,6 +34,7 @@ export function mapVehiculoRow(r: VehiculoRow): Vehiculo {
     // La URL firmada la agrega quien llama: firmar de a una seria un roundtrip
     // por vehiculo en un listado de cientos.
     imagen_url: null,
+    ultima_visita: r.ultima_visita,
     aceite_tipo: r.aceite_tipo,
     aceite_litros: r.aceite_litros != null ? Number(r.aceite_litros) : null,
     observaciones: r.observaciones,

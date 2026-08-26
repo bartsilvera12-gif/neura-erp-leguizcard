@@ -1,10 +1,9 @@
 import { createServiceRoleClientWithDbSchema } from "@/lib/supabase/empresa-data-schema";
 
 export interface CreateVentaItemInput {
-  /** NULL en las líneas manuales (no apuntan al catálogo). */
-  producto_id: string | null;
+  producto_id: string;
   producto_nombre: string;
-  sku: string | null;
+  sku: string;
   cantidad: number;
   precio_venta_original: number;
   precio_venta: number;
@@ -12,15 +11,6 @@ export interface CreateVentaItemInput {
   subtotal: number;
   monto_iva: number;
   total_linea: number;
-  /** Línea escrita a mano (servicio/trabajo): no valida ni descuenta stock. */
-  es_manual?: boolean;
-  /** Costo por unidad cargado a mano, solo en líneas manuales. */
-  costo_unitario?: number | null;
-}
-
-/** Una línea es manual si viene marcada o si directamente no trae producto. */
-function esLineaManual(it: CreateVentaItemInput): boolean {
-  return it.es_manual === true || !it.producto_id;
 }
 
 export interface CreateVentaPedidoCocinaInput {
@@ -98,19 +88,10 @@ export async function createVentaTransaccionalPg(
     throw new Error("Los totales no coinciden con los ítems; revisá el carrito.");
   }
 
-  // Una línea manual sin descripción quedaría como un renglón vacío en la factura.
-  for (const it of items) {
-    if (esLineaManual(it) && !it.producto_nombre.trim()) {
-      throw new Error("Las líneas manuales necesitan una descripción del trabajo.");
-    }
-  }
-
-  // Solo las líneas del catálogo tocan stock; las manuales se saltean.
+  // Toda línea sale del catálogo, así que toda línea se mira contra el stock.
   const qtyByProduct = new Map<string, number>();
   for (const it of items) {
-    if (esLineaManual(it)) continue;
-    const pid = it.producto_id as string;
-    qtyByProduct.set(pid, (qtyByProduct.get(pid) ?? 0) + it.cantidad);
+    qtyByProduct.set(it.producto_id, (qtyByProduct.get(it.producto_id) ?? 0) + it.cantidad);
   }
 
   const sb = createServiceRoleClientWithDbSchema(params.schema);
@@ -230,12 +211,9 @@ export async function createVentaTransaccionalPg(
     const itemsRows = items.map((line) => ({
       empresa_id: params.empresaId,
       venta_id: ventaId,
-      // Línea manual: sin producto ni SKU, con el costo que cargó el usuario.
-      producto_id: esLineaManual(line) ? null : line.producto_id,
+      producto_id: line.producto_id,
       producto_nombre: line.producto_nombre,
-      sku: esLineaManual(line) ? null : line.sku,
-      es_manual: esLineaManual(line),
-      costo_unitario: esLineaManual(line) ? line.costo_unitario ?? null : null,
+      sku: line.sku,
       cantidad: line.cantidad,
       precio_venta_original: line.precio_venta_original,
       precio_venta: line.precio_venta,
@@ -249,8 +227,7 @@ export async function createVentaTransaccionalPg(
 
     // 7) Descuento de stock + movimientos solo para productos con controla_stock=true.
     for (const line of items) {
-      if (esLineaManual(line)) continue;
-      const p = stockMap.get(line.producto_id as string)!;
+      const p = stockMap.get(line.producto_id)!;
       if (!p.controlaStock) continue;
       const nuevoStock = p.stock - line.cantidad;
       const upd = await sb

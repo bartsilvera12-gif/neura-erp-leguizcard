@@ -614,18 +614,7 @@ export default function NuevaVentaPage() {
   // Condición de venta: si es Crédito, exigir plazo de al menos 1 día y un cliente.
   const plazoDiasNum = parseInt(plazoDias) || 0;
   const creditoValido = tipoVenta === "CONTADO" || (plazoDiasNum >= 1 && !!clienteId);
-  // Una línea manual sin descripción saldría como un renglón vacío en la factura.
-  const manualesValidas = items.every((i) => !i.es_manual || i.producto_nombre.trim().length > 0);
-  const ventaValida   = items.length > 0 && creditoValido && manualesValidas;
-
-  // Ganancia de los trabajos cargados a mano: precio facturado − costo cargado.
-  // Solo cuenta las líneas manuales; en las de catálogo el costo sale del stock.
-  const totalCostoManual = items.reduce(
-    (s, i) => s + (i.es_manual ? (i.costo_unitario ?? 0) * i.cantidad : 0),
-    0
-  );
-  const totalVentaManual = items.reduce((s, i) => s + (i.es_manual ? i.total_linea : 0), 0);
-  const hayCostoManual = items.some((i) => i.es_manual && (i.costo_unitario ?? 0) > 0);
+  const ventaValida   = items.length > 0 && creditoValido;
 
   // Cliente (opcional) — selección + filtrado del buscador.
   const clienteSel = clientes.find((c) => c.id === clienteId) ?? null;
@@ -794,39 +783,6 @@ export default function NuevaVentaPage() {
     setComboHighlight(-1);
     setErrorLinea(null);
     setTimeout(() => comboInputRef.current?.focus(), 0);
-  }
-
-  /**
-   * Agrega una línea escrita a mano: un trabajo completo en un solo renglón
-   * ("Mantenimiento de compresor: cambio de pistones, aceite y válvulas"), sin
-   * tener que cargar repuesto por repuesto. No toca stock; el costo se escribe
-   * a mano para que quede la ganancia del trabajo.
-   */
-  function agregarItemManual() {
-    setItems((prev) => [
-      ...prev,
-      {
-        producto_id: "",           // el backend lo guarda como NULL
-        producto_nombre: "",
-        sku: "",
-        es_manual: true,
-        costo_unitario: null,
-        cantidad: 1,
-        unidad_medida: "UNIDAD",
-        precio_venta_original: 0,
-        precio_venta: 0,
-        tipo_iva: "10%",
-        // precio_manual evita que las reglas de precio por canal pisen el importe.
-        precio_manual: true,
-        subtotal: 0,
-        monto_iva: 0,
-        total_linea: 0,
-        presentacion_id: null,
-        presentacion_nombre: null,
-        presentacion_cantidad_base: null,
-      },
-    ]);
-    setErrorLinea(null);
   }
 
   function updateItemCampo(idx: number, patch: Partial<LineaVenta>) {
@@ -1299,15 +1255,6 @@ export default function NuevaVentaPage() {
           <div className="mb-3 flex items-center justify-between gap-2">
             <SectionTitle>Productos en esta venta</SectionTitle>
             <div className="flex shrink-0 items-center gap-2">
-              {/* Trabajo escrito a mano: una sola línea, sin cargar repuesto por repuesto. */}
-              <button
-                type="button"
-                onClick={agregarItemManual}
-                className="rounded-lg border border-[#0EA5E9] bg-[#0EA5E9]/5 px-3 py-1.5 text-xs font-semibold text-[#0284C7] hover:bg-[#0EA5E9]/10"
-                title="Agregar un servicio o trabajo escribiéndolo a mano"
-              >
-                + Servicio / trabajo a mano
-              </button>
               <button
                 type="button"
                 onClick={() => setPickerOpen(true)}
@@ -1384,17 +1331,15 @@ export default function NuevaVentaPage() {
 
           {items.length === 0 ? (
             <div className="mt-4 py-10 text-center text-gray-400 text-sm border-2 border-dashed border-gray-200 rounded-lg">
-              Buscá un producto arriba y se agrega automáticamente a la venta,
-              o usá <span className="font-semibold text-[#0284C7]">+ Servicio / trabajo a mano</span> para
-              facturar un trabajo en una sola línea.
+              Buscá un producto o servicio arriba y se agrega automáticamente a la venta.
             </div>
           ) : (
             <>
-              {/* min-w fuerza scroll horizontal en mobile (9 columnas).
+              {/* min-w fuerza scroll horizontal en mobile (8 columnas).
                   Columnas secundarias (SKU, Subtotal, IVA Gs) se ocultan
                   progresivamente: en mobile solo Producto/Cant/Precio/Total/eliminar. */}
               <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-                <table className="w-full min-w-[900px] text-sm text-left">
+                <table className="w-full min-w-[820px] text-sm text-left">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500">
                       <th className="px-3 py-3">Producto</th>
@@ -1402,7 +1347,6 @@ export default function NuevaVentaPage() {
                       <th className="hidden px-3 py-3 text-center md:table-cell">IVA</th>
                       <th className="px-3 py-3 text-center">Cant.</th>
                       <th className="px-3 py-3 text-right">Precio unit.</th>
-                      <th className="px-3 py-3 text-right">Costo</th>
                       <th className="px-3 py-3 text-right">Stock</th>
                       <th className="px-3 py-3 text-right">Subtotal</th>
                       <th className="w-10 px-2 py-3"></th>
@@ -1411,30 +1355,13 @@ export default function NuevaVentaPage() {
                   <tbody className="divide-y divide-slate-100">
                     {items.map((item, idx) => {
                       const prod = productos.find((p) => p.id === item.producto_id);
-                      // Un trabajo a mano no sale del catálogo: nunca controla stock.
-                      const controla = item.es_manual ? false : prod ? prod.controla_stock !== false : true;
+                      const controla = prod ? prod.controla_stock !== false : true;
                       const stock = prod?.stock_actual ?? 0;
                       const stockBajo = controla && item.cantidad > stock;
-                      const costoLinea = (item.costo_unitario ?? 0) * item.cantidad;
-                      const gananciaLinea = item.total_linea - costoLinea;
                       return (
                         <tr key={idx} className="align-middle transition-colors hover:bg-[#0EA5E9]/5">
-                          {/* Producto + SKU (o descripción libre si es un trabajo a mano) */}
+                          {/* Producto + SKU */}
                           <td className="px-3 py-2.5">
-                            {item.es_manual ? (
-                              <div className="min-w-0">
-                                <textarea
-                                  value={item.producto_nombre}
-                                  onChange={(e) => updateItemCampo(idx, { producto_nombre: e.target.value })}
-                                  rows={2}
-                                  placeholder="Ej: Mantenimiento de compresor: cambio de pistones, aceite y válvulas"
-                                  className="w-full min-w-[18rem] resize-y rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none focus:border-[#0EA5E9]"
-                                />
-                                <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#0284C7]">
-                                  Trabajo a mano · no descuenta stock
-                                </p>
-                              </div>
-                            ) : (
                             <div className="flex items-center gap-3">
                               <ProductoThumb url={prod?.imagen_url} alt={item.producto_nombre} />
                               <div className="min-w-0">
@@ -1449,13 +1376,9 @@ export default function NuevaVentaPage() {
                                 )}
                               </div>
                             </div>
-                            )}
                           </td>
-                          {/* Tipo de precio — los canales no aplican a un trabajo a mano */}
+                          {/* Tipo de precio */}
                           <td className="hidden px-3 py-2.5 md:table-cell">
-                            {item.es_manual ? (
-                              <span className="text-xs text-slate-400">—</span>
-                            ) : (
                             <div className="inline-flex overflow-hidden rounded-lg border border-slate-200">
                               {(["minorista", "mayorista", "distribuidor"] as const).map((tp) => {
                                 const sel = (item.tipo_precio ?? "minorista") === tp;
@@ -1467,7 +1390,6 @@ export default function NuevaVentaPage() {
                                 );
                               })}
                             </div>
-                            )}
                           </td>
                           {/* IVA */}
                           <td className="hidden px-3 py-2.5 md:table-cell">
@@ -1511,37 +1433,15 @@ export default function NuevaVentaPage() {
                               className="h-8 w-28 rounded-md border border-slate-200 bg-white px-2 text-right text-sm tabular-nums"
                             />
                           </td>
-                          {/* Costo — solo en trabajos a mano (repuestos + mano de obra) */}
-                          <td className="px-3 py-2.5 text-right">
-                            {item.es_manual ? (
-                              <input
-                                type="number" min={0} value={item.costo_unitario ?? ""}
-                                onChange={(e) => {
-                                  const v = e.target.value;
-                                  updateItemCampo(idx, { costo_unitario: v === "" ? null : Math.max(0, Number(v) || 0) });
-                                }}
-                                placeholder="0"
-                                title="Cuánto costó el trabajo por unidad (repuestos + mano de obra)"
-                                className="h-8 w-28 rounded-md border border-slate-200 bg-white px-2 text-right text-sm tabular-nums"
-                              />
-                            ) : (
-                              <span className="text-xs text-slate-400">—</span>
-                            )}
-                          </td>
                           {/* Stock */}
                           <td className="px-3 py-2.5 text-right">
                             <span className={`text-xs font-semibold tabular-nums ${!controla ? "text-slate-400" : stockBajo ? "text-red-600" : "text-slate-600"}`}>
                               {!controla ? "—" : stock}
                             </span>
                           </td>
-                          {/* Subtotal (total de línea) + ganancia si se cargó el costo */}
+                          {/* Subtotal (total de línea) */}
                           <td className="px-3 py-2.5 text-right">
                             <span className="text-sm font-bold tabular-nums text-slate-900">{formatGs(item.total_linea)}</span>
-                            {item.es_manual && costoLinea > 0 && (
-                              <p className={`mt-0.5 text-[11px] font-semibold tabular-nums ${gananciaLinea >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                                Ganancia {formatGs(gananciaLinea)}
-                              </p>
-                            )}
                           </td>
                           {/* Quitar */}
                           <td className="px-2 py-2.5 text-center">
@@ -1579,22 +1479,6 @@ export default function NuevaVentaPage() {
                       <span>TOTAL</span>
                       <span className="tabular-nums">{formatGs(totalGeneral)}</span>
                     </div>
-                    {/* Ganancia de los trabajos cargados a mano (interno, no sale en la factura). */}
-                    {hayCostoManual && (
-                      <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2">
-                        <div className="flex justify-between text-xs text-gray-500">
-                          <span>Costo de los trabajos</span>
-                          <span className="tabular-nums">{formatGs(totalCostoManual)}</span>
-                        </div>
-                        <div className="mt-1 flex justify-between text-sm font-bold">
-                          <span className="text-gray-700">Ganancia</span>
-                          <span className={`tabular-nums ${totalVentaManual - totalCostoManual >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                            {formatGs(totalVentaManual - totalCostoManual)}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-[10px] text-gray-400">Solo uso interno: no aparece en la factura.</p>
-                      </div>
-                    )}
                   </div>
 
                   {/* Saldo a favor del cliente (crédito por devoluciones). */}

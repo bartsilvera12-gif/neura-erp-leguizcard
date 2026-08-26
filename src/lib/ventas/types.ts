@@ -8,22 +8,10 @@ export type TipoPrecioVenta = "minorista" | "mayorista" | "distribuidor" | "cost
 
 /** Un ítem dentro de una venta (una línea de producto). */
 export interface LineaVenta {
-  /** Vacío ("") en las líneas manuales: el backend lo guarda como NULL. */
+  /** Toda línea sale del catálogo: los servicios son productos con receta. */
   producto_id:           string;
   producto_nombre:       string;
   sku:                   string;
-  /**
-   * Línea escrita a mano (un trabajo/servicio, ej. "Mantenimiento de compresor:
-   * cambio de pistones, aceite y válvulas"). No sale del catálogo, no descuenta
-   * stock y su costo se carga a mano en `costo_unitario`.
-   */
-  es_manual?:            boolean;
-  /**
-   * Costo por unidad cargado a mano (repuestos + mano de obra), solo en líneas
-   * manuales. Sirve para calcular la ganancia del trabajo. En las líneas de
-   * catálogo queda sin definir: ahí el costo real sale del movimiento de stock.
-   */
-  costo_unitario?:       number | null;
   /** Cantidad en la PRESENTACION elegida (ej. 2 = 2 cajas o 10 unidades). */
   cantidad:              number;
   /**

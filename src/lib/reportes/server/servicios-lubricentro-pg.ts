@@ -5,7 +5,8 @@
  * 2) Historial por cliente (que vehiculos tiene, cuando vino, cuanto gasto).
  *
  * Costo de un servicio: se toma, en este orden,
- *   a) `ventas_items.costo_unitario` si la linea lo declaro (item manual);
+ *   a) `ventas_items.costo_unitario` si la linea lo trae (historico: la carga
+ *      manual de costo por linea ya no existe, pero la columna se conserva);
  *   b) el `costo_unitario` que devuelve `fn_receta_costeo()` para su receta;
  *   c) `productos.costo_promedio`.
  *

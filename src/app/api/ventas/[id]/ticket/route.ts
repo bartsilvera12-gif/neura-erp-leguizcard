@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
-import { membreteTicket } from "@/lib/documentos/membrete";
+import { EMPRESA_DOC, membreteTicket } from "@/lib/documentos/membrete";
 
 /**
  * GET /api/ventas/[id]/ticket?w=58|80&mode=comandas&auto=1
@@ -18,7 +18,9 @@ import { membreteTicket } from "@/lib/documentos/membrete";
  * No toca SIFEN, no genera XML, no usa timbrado.
  */
 
-const NEGOCIO = "LEGUIZCARD";
+// El nombre vive en EMPRESA_DOC, que es lo que imprime el membrete. Duplicarlo
+// aca hacia que el <title> pudiera decir una cosa y el ticket otra.
+const NEGOCIO = EMPRESA_DOC.nombre;
 
 // ── Clasificación PIZZERÍA / PLANCHA ───────────────────────────────────────
 // Primary: categoría hija del producto. Fallback: prefijo de SKU.

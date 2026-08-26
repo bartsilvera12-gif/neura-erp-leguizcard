@@ -6,17 +6,32 @@
  */
 
 export const EMPRESA_DOC = {
-  nombre: "LEGUIZCARD",
-  actividad: ["Soluciones industriales"],
+  // El nombre sale del logo que entrego el cliente: LEGUIZCAR, sin D. El schema
+  // y el dominio siguen siendo "leguizcard" — son infraestructura y no se tocan.
+  nombre: "LEGUIZCAR",
+  actividad: ["Clínica de automóviles"],
   telefono: "",
   email: "",
   direccion: [] as string[],
   /**
-   * Logo del cliente, servido desde /public. Vacio = documentos sin logo.
-   * Leguizcard todavia no entrego su logo; no se usa el de la plataforma para
-   * no imprimir branding ajeno en sus documentos.
+   * Logo para documentos A4 (presupuestos, ordenes de compra, extractos).
+   * Negro sobre fondo transparente: la mayoria se imprime en blanco y negro y
+   * el naranja de marca saldria gris lavado.
    */
-  logoUrl: "",
+  logoUrl: "/brand/leguizcar-logo-doc.png",
+  /**
+   * Logo para ticket termico. Es un archivo APARTE y no un resize del anterior:
+   * el cabezal termico no imprime medios tonos, asi que va en blanco y negro
+   * puro y al ancho real del papel (384 px). Mandarle el PNG con antialias del
+   * A4 lo obligaria a tramar, y el tramado ensucia los trazos finos.
+   */
+  logoTicketUrl: "/brand/leguizcar-logo.png",
+  /**
+   * El logo de Leguizcar ya trae el nombre dibujado. Repetirlo en texto debajo
+   * se ve como un error de armado y gasta papel. Si algun dia el logo pasara a
+   * ser solo el simbolo, esto vuelve a false y el nombre reaparece.
+   */
+  logoIncluyeNombre: true,
 };
 
 function esc(v: unknown): string {
@@ -63,10 +78,20 @@ export function membreteA4(origin = ""): string {
  */
 export function membreteTicket(origin = ""): string {
   const e = EMPRESA_DOC;
-  const logo = e.logoUrl ? (origin ? `${origin}${e.logoUrl}` : e.logoUrl) : "";
+  const src = e.logoTicketUrl || e.logoUrl;
+  const logo = src ? (origin ? `${origin}${src}` : src) : "";
+  // image-rendering:pixelated evita que el navegador suavice el PNG al escalar:
+  // el logo ya viene binarizado y un remuestreo suave le devolveria los grises
+  // que la termica no puede imprimir.
   const logoHtml = logo
-    ? `<img src="${esc(logo)}" alt="${esc(e.nombre)}" style="max-width:210px;max-height:110px;width:auto;height:auto;object-fit:contain;display:inline-block;margin:0 auto 4px;" />`
+    ? `<img src="${esc(logo)}" alt="${esc(e.nombre)}" style="max-width:118px;width:100%;height:auto;object-fit:contain;display:block;margin:0 auto 4px;image-rendering:pixelated;" />`
     : "";
+  // Si el logo ya trae el nombre, no se repite en texto. Sin logo siempre se
+  // imprime: el ticket no puede salir sin identificar al negocio.
+  const nombreHtml =
+    logo && e.logoIncluyeNombre
+      ? ""
+      : `<div style="font-weight:700;font-size:12px;">${esc(e.nombre)}</div>`;
   const telHtml = e.telefono ? `<div style="font-size:10px;">Tel: ${esc(e.telefono)}</div>` : "";
   const emailHtml = e.email ? `<div style="font-size:10px;word-break:break-all;">${esc(e.email)}</div>` : "";
   const dirHtml = e.direccion.length
@@ -75,7 +100,7 @@ export function membreteTicket(origin = ""): string {
   return `
   <div style="text-align:center;padding-bottom:6px;margin-bottom:6px;border-bottom:1px dashed #000;">
     ${logoHtml}
-    <div style="font-weight:700;font-size:12px;">${esc(e.nombre)}</div>
+    ${nombreHtml}
     ${dirHtml}
     ${telHtml}
     ${emailHtml}

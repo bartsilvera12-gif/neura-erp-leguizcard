@@ -230,7 +230,7 @@ export interface ItemServicioVehiculo {
   unidad_medida: string | null;
   presentacion_nombre: string | null;
   total_linea: string | number;
-  /** true si es un servicio (mano de obra); false si es un insumo o repuesto. */
+  /** true si el producto define un mantenimiento (tiene intervalo cargado). */
   es_servicio: boolean;
 }
 
@@ -288,10 +288,13 @@ export async function listServiciosDeVehiculo(
                          'unidad_medida', p.unidad_medida,
                          'presentacion_nombre', i.presentacion_nombre,
                          'total_linea', i.total_linea,
-                         'es_servicio', COALESCE(p.tipo_producto, '') = 'servicio'
+                         'es_servicio', (p.servicio_intervalo_km IS NOT NULL
+                                         OR p.servicio_intervalo_meses IS NOT NULL)
                        )
-                       -- El servicio primero, despues lo que consumio.
-                       ORDER BY (COALESCE(p.tipo_producto, '') = 'servicio') DESC, i.id
+                       -- Primero lo que marca el mantenimiento (el aceite),
+                       -- despues el resto de lo que se le puso.
+                       ORDER BY (p.servicio_intervalo_km IS NOT NULL
+                                 OR p.servicio_intervalo_meses IS NOT NULL) DESC, i.id
                      )
                 FROM ${tI} i
                 LEFT JOIN ${tP} p ON p.id = i.producto_id AND p.empresa_id = i.empresa_id

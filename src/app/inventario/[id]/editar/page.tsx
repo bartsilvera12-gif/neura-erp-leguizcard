@@ -48,6 +48,8 @@ export default function EditarProductoPage() {
     unidad_medida: "",
     metodo_valuacion: "CPP" as MetodoValuacion,
     tipo_producto: "reventa" as "reventa" | "repuesto" | "servicio",
+    servicio_intervalo_km: "",
+    servicio_intervalo_meses: "",
   });
   const [imagenPath, setImagenPath] = useState<string | null>(null);
   const [imagenUrl, setImagenUrl] = useState<string | null>(null);
@@ -150,6 +152,8 @@ export default function EditarProductoPage() {
         unidad_medida: p.unidad_medida,
         metodo_valuacion: p.metodo_valuacion,
         tipo_producto: p.tipo_producto ?? "reventa",
+        servicio_intervalo_km: p.servicio_intervalo_km != null ? String(p.servicio_intervalo_km) : "",
+        servicio_intervalo_meses: p.servicio_intervalo_meses != null ? String(p.servicio_intervalo_meses) : "",
       });
       setCodigoOriginal(p.codigo_barras ?? null);
       setImagenPath(p.imagen_path ?? null);
@@ -288,6 +292,8 @@ export default function EditarProductoPage() {
         unidad_medida: form.unidad_medida.trim().toUpperCase() || "UNIDAD",
         metodo_valuacion: form.metodo_valuacion,
         tipo_producto: form.tipo_producto,
+        servicio_intervalo_km: form.servicio_intervalo_km ? parseInt(form.servicio_intervalo_km) : null,
+        servicio_intervalo_meses: form.servicio_intervalo_meses ? parseInt(form.servicio_intervalo_meses) : null,
         categoria_principal_id: categoriaId,
         ubicacion_principal_id: ubicacionId,
         proveedor_principal_id: proveedorId,
@@ -435,6 +441,46 @@ export default function EditarProductoPage() {
                   </button>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Intervalo de mantenimiento — vale para cualquier producto: en un
+              lubricentro el proximo cambio lo marca el ACEITE que se le puso al
+              auto, no una linea de mano de obra aparte. */}
+          <div className="rounded-xl border border-[#4FAEB2]/30 bg-[#4FAEB2]/5 p-4">
+            <p className="text-sm font-semibold text-slate-700">Mantenimiento</p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Cada cuánto hay que repetirlo. Cuando este producto se le vende a un vehículo, el
+              sistema calcula con esto cuándo le toca el próximo y avisa. Vence por lo que ocurra
+              primero. <strong className="font-semibold">Dejalo vacío</strong> si el producto no
+              marca un mantenimiento.
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>Cada cuántos km</label>
+                <input
+                  type="number"
+                  min={1}
+                  name="servicio_intervalo_km"
+                  value={form.servicio_intervalo_km}
+                  onChange={handleChange}
+                  placeholder="5000"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Cada cuántos meses</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={120}
+                  name="servicio_intervalo_meses"
+                  value={form.servicio_intervalo_meses}
+                  onChange={handleChange}
+                  placeholder="6"
+                  className={inputClass}
+                />
+              </div>
             </div>
           </div>
 

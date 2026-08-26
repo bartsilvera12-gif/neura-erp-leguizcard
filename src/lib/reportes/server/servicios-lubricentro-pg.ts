@@ -112,7 +112,7 @@ export async function listRentabilidadServicios(
       FROM lineas l
       JOIN ${tP} p ON p.id = l.producto_id AND p.empresa_id = $1::uuid
       LEFT JOIN costo_receta cr ON cr.producto_id = p.id
-     WHERE p.tipo_producto = 'servicio'
+     WHERE p.servicio_intervalo_km IS NOT NULL OR p.servicio_intervalo_meses IS NOT NULL
      GROUP BY p.id, p.nombre, p.sku, cr.costo_unitario, cr.producto_id,
               p.servicio_intervalo_km, p.servicio_intervalo_meses, p.costo_promedio
      ORDER BY SUM(l.total_linea) DESC
@@ -168,7 +168,7 @@ export async function listCatalogoServicios(
       LEFT JOIN costo_receta cr ON cr.producto_id = p.id
       LEFT JOIN insumos i ON i.producto_id = p.id
      WHERE p.empresa_id = $1::uuid
-       AND p.tipo_producto = 'servicio'
+       AND (p.servicio_intervalo_km IS NOT NULL OR p.servicio_intervalo_meses IS NOT NULL)
        AND COALESCE(p.activo, true) = true
      ORDER BY p.nombre
      LIMIT 500

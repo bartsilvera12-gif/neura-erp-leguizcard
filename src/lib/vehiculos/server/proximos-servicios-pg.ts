@@ -92,11 +92,12 @@ function cteServiciosYUltimo(
 ): string {
   return `
     WITH servicios AS (
-      -- Servicios con algun intervalo configurado.
+      -- Todo producto con intervalo configurado, sea del tipo que sea. En un
+      -- lubricentro que vende productos, el mantenimiento lo marca el ACEITE
+      -- que se le puso al auto, no una linea de mano de obra aparte.
       SELECT p.id, p.nombre, p.servicio_intervalo_km, p.servicio_intervalo_meses
         FROM ${tP} p
        WHERE p.empresa_id = $1::uuid
-         AND p.tipo_producto = 'servicio'
          AND COALESCE(p.activo, true) = true
          AND (p.servicio_intervalo_km IS NOT NULL OR p.servicio_intervalo_meses IS NOT NULL)
     ),

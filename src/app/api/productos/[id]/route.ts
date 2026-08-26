@@ -149,7 +149,8 @@ export async function PATCH(
       typeof body.marca === "string" ? body.marca.trim() || null : body.marca === null ? null : undefined;
     if (marcaVal !== undefined) patch.marca = marcaVal;
 
-    // Los intervalos solo tienen sentido en servicios; en el resto se guardan null.
+    // El intervalo vale para cualquier producto: en un lubricentro que vende
+    // productos, el proximo cambio lo marca el aceite que se le puso al auto.
     const intKm =
       body.servicio_intervalo_km == null || body.servicio_intervalo_km === ""
         ? null
@@ -158,7 +159,7 @@ export async function PATCH(
       if (intKm != null && (!Number.isFinite(intKm) || intKm <= 0)) {
         return NextResponse.json(errorResponse("Intervalo de km inválido."), { status: 400 });
       }
-      patch.servicio_intervalo_km = tipoProd === "servicio" ? intKm : null;
+      patch.servicio_intervalo_km = intKm;
     }
     const intMeses =
       body.servicio_intervalo_meses == null || body.servicio_intervalo_meses === ""
@@ -168,7 +169,7 @@ export async function PATCH(
       if (intMeses != null && (!Number.isInteger(intMeses) || intMeses <= 0 || intMeses > 120)) {
         return NextResponse.json(errorResponse("Intervalo de meses inválido."), { status: 400 });
       }
-      patch.servicio_intervalo_meses = tipoProd === "servicio" ? intMeses : null;
+      patch.servicio_intervalo_meses = intMeses;
     }
 
     let categoriaCambia = false;

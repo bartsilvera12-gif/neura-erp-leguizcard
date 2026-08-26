@@ -627,16 +627,6 @@ export default function NuevaVentaPage() {
   // ── Vehiculo: seleccion, busqueda y reglas ────────────────────────────────
   const vehiculoSel = vehiculos.find((v) => v.id === vehiculoId) ?? null;
 
-  /**
-   * Un servicio (cambio de aceite, etc.) le pertenece a un auto: sin vehiculo
-   * no entra al historial del vehiculo ni dispara el aviso de proximo servicio.
-   * Una venta de mostrador (un bidon de aceite y listo) no lo necesita.
-   */
-  const hayServicio = items.some(
-    (i) => productos.find((p) => p.id === i.producto_id)?.tipo_producto === "servicio"
-  );
-  const faltaVehiculo = hayServicio && !vehiculoId;
-
   /** El odometro no retrocede: si la lectura es menor, el backend la ignora. */
   const kmNum = kmRegistrado.trim() === "" ? null : Number(kmRegistrado);
   const kmRetrocede =
@@ -717,7 +707,7 @@ export default function NuevaVentaPage() {
     elegirVehiculo(r.vehiculo);
   }
 
-  const ventaValida   = items.length > 0 && creditoValido && !faltaVehiculo;
+  const ventaValida   = items.length > 0 && creditoValido;
 
   // Cliente (opcional) — selección + filtrado del buscador.
   const clienteSel = clientes.find((c) => c.id === clienteId) ?? null;
@@ -1249,12 +1239,7 @@ export default function NuevaVentaPage() {
                 cuando el auto entra; el cliente se completa solo desde el auto. */}
             <div ref={vehiculoContainerRef} className="relative">
               <label className={labelClass}>
-                Vehículo{" "}
-                {faltaVehiculo ? (
-                  <span className="text-xs font-semibold text-amber-600">(obligatorio: hay un servicio)</span>
-                ) : (
-                  <span className="text-xs font-normal text-gray-400">(opcional)</span>
-                )}
+                Vehículo <span className="text-xs font-normal text-gray-400">(opcional)</span>
               </label>
 
               <div className="flex gap-2">
@@ -1270,9 +1255,7 @@ export default function NuevaVentaPage() {
                     }}
                     onFocus={() => setVehiculoOpen(true)}
                     placeholder="Buscar por patente, marca o cliente…"
-                    className={`${inputClass} pl-9 ${vehiculoSel ? "font-semibold uppercase tracking-wide" : ""} ${
-                      faltaVehiculo ? "border-amber-400" : ""
-                    }`}
+                    className={`${inputClass} pl-9 ${vehiculoSel ? "font-semibold uppercase tracking-wide" : ""}`}
                   />
                 </div>
                 {vehiculoSel && (
@@ -1431,13 +1414,6 @@ export default function NuevaVentaPage() {
                 </div>
               )}
 
-              {faltaVehiculo && !altaVehiculo && (
-                <p className="mt-1.5 flex items-start gap-1 text-[11px] text-amber-700">
-                  <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
-                  Esta venta incluye un servicio. Sin vehículo no queda en su historial ni genera el
-                  aviso del próximo mantenimiento.
-                </p>
-              )}
             </div>
 
             {/* Condición: Contado / Crédito */}
@@ -1992,12 +1968,6 @@ export default function NuevaVentaPage() {
           {/* Acciones — stack vertical full-width en mobile (mas facil de tappear),
               fila en sm+. Confirmar en orden visual primero (primary). */}
           <div className="mt-6 flex flex-col-reverse sm:flex-row gap-3">
-            {faltaVehiculo && (
-              <p className="flex w-full items-center gap-1.5 text-xs font-medium text-amber-700 sm:mr-auto sm:w-auto">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                Falta elegir el vehículo, arriba: esta venta incluye un servicio.
-              </p>
-            )}
             <button
               type="button"
               onClick={() => router.push("/ventas")}
@@ -2010,7 +1980,7 @@ export default function NuevaVentaPage() {
               onClick={handleSubmit}
               disabled={!ventaValida || guardando || efectivoInsuficiente || mixtoInvalido}
               aria-busy={guardando}
-              title={faltaVehiculo ? "Elegí el vehículo: la venta incluye un servicio." : efectivoInsuficiente ? "El efectivo recibido no cubre el total a cobrar." : mixtoInvalido ? "El cobro mixto no cubre el total o falta la entidad." : undefined}
+              title={efectivoInsuficiente ? "El efectivo recibido no cubre el total a cobrar." : mixtoInvalido ? "El cobro mixto no cubre el total o falta la entidad." : undefined}
               className="bg-[#0EA5E9] hover:bg-[#0284C7] text-white px-6 py-3 rounded-lg text-sm font-medium transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 min-h-[48px] w-full sm:w-auto"
             >
               {guardando ? "Guardando…" : "Confirmar venta"}

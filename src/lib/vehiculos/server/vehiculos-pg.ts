@@ -219,6 +219,21 @@ export async function desactivarVehiculo(
   return (r.rowCount ?? 0) > 0;
 }
 
+/** Una linea de la atencion: que se le hizo o que se le puso al vehiculo. */
+export interface ItemServicioVehiculo {
+  producto_id: string | null;
+  producto_nombre: string;
+  sku: string | null;
+  marca: string | null;
+  cantidad: string | number;
+  /** Unidad del producto (L, UNIDAD...). Sale del catalogo, no de la linea. */
+  unidad_medida: string | null;
+  presentacion_nombre: string | null;
+  total_linea: string | number;
+  /** true si es un servicio (mano de obra); false si es un insumo o repuesto. */
+  es_servicio: boolean;
+}
+
 export interface ServicioVehiculoRow {
   venta_id: string;
   numero_control: string;
@@ -226,10 +241,23 @@ export interface ServicioVehiculoRow {
   estado: string;
   total: string | number;
   km_registrado: string | number | null;
-  detalle: string[] | null;
+  /**
+   * Km recorridos desde la visita anterior. NULL si a alguna de las dos le
+   * falta la lectura del odometro. Contesta "cuanto usa el auto por mes",
+   * que es lo que permite estimar cuando toca el proximo servicio.
+   */
+  km_recorridos: string | number | null;
+  /** Lo que anoto el taller en la venta (ej. "pierde aceite por el reten"). */
+  observaciones: string | null;
+  items: ItemServicioVehiculo[];
 }
 
-/** Historial de atenciones del vehiculo, de la mas reciente a la mas vieja. */
+/**
+ * Historial de atenciones del vehiculo, de la mas reciente a la mas vieja,
+ * con el detalle de cada una: que servicio se hizo, que insumos se usaron y
+ * en que cantidad. Es lo que se mira cuando el cliente pregunta que le
+ * pusieron la vez pasada.
+ */
 export async function listServiciosDeVehiculo(
   schemaRaw: string,
   empresaId: string,
@@ -238,14 +266,37 @@ export async function listServiciosDeVehiculo(
   const schema = assertAllowedChatDataSchema(schemaRaw);
   const tV = quoteSchemaTable(schema, "ventas");
   const tI = quoteSchemaTable(schema, "ventas_items");
+  const tP = quoteSchemaTable(schema, "productos");
   const { rows } = await pool().query<ServicioVehiculoRow>(
     `SELECT v.id::text AS venta_id, v.numero_control, v.fecha, v.estado,
-            v.total, v.km_registrado,
-            ARRAY(
-              SELECT i.producto_nombre FROM ${tI} i
+            v.total, v.km_registrado, v.observaciones,
+            -- Diferencia contra la lectura de la visita anterior. Las anuladas
+            -- se excluyen del calculo particionando por ese mismo criterio.
+            CASE WHEN v.estado <> 'anulada'
+                 THEN v.km_registrado - LAG(v.km_registrado) OVER (
+                        PARTITION BY (v.estado = 'anulada') ORDER BY v.fecha
+                      )
+            END AS km_recorridos,
+            COALESCE((
+              SELECT json_agg(
+                       json_build_object(
+                         'producto_id', i.producto_id::text,
+                         'producto_nombre', i.producto_nombre,
+                         'sku', i.sku,
+                         'marca', p.marca,
+                         'cantidad', i.cantidad,
+                         'unidad_medida', p.unidad_medida,
+                         'presentacion_nombre', i.presentacion_nombre,
+                         'total_linea', i.total_linea,
+                         'es_servicio', COALESCE(p.tipo_producto, '') = 'servicio'
+                       )
+                       -- El servicio primero, despues lo que consumio.
+                       ORDER BY (COALESCE(p.tipo_producto, '') = 'servicio') DESC, i.id
+                     )
+                FROM ${tI} i
+                LEFT JOIN ${tP} p ON p.id = i.producto_id AND p.empresa_id = i.empresa_id
                WHERE i.venta_id = v.id AND i.empresa_id = v.empresa_id
-               ORDER BY i.id
-            ) AS detalle
+            ), '[]'::json) AS items
        FROM ${tV} v
       WHERE v.empresa_id = $1::uuid AND v.vehiculo_id = $2::uuid
       ORDER BY v.fecha DESC, v.numero_control DESC

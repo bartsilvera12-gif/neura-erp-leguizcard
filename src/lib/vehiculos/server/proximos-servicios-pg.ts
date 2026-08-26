@@ -50,6 +50,72 @@ export interface ProximoServicioRow {
 }
 
 /**
+ * Reglas de vencimiento en un solo lugar: las usan el listado global de avisos
+ * y la ficha del vehiculo. Si cada pantalla calculara por su cuenta, podrian
+ * contestar distinto a "cuanto me falta" para el mismo auto.
+ *
+ * Referencian los alias s (servicio), u (ultima vez que se hizo) y veh.
+ */
+const SQL_PROXIMO_KM = `CASE WHEN s.servicio_intervalo_km IS NOT NULL AND u.ultimo_km IS NOT NULL
+           THEN u.ultimo_km + s.servicio_intervalo_km END`;
+
+const SQL_PROXIMA_FECHA = `CASE WHEN s.servicio_intervalo_meses IS NOT NULL
+           THEN u.ultima_fecha + (s.servicio_intervalo_meses || ' months')::interval END`;
+
+const SQL_KM_RESTANTES = `CASE WHEN s.servicio_intervalo_km IS NOT NULL AND u.ultimo_km IS NOT NULL AND veh.km_actual IS NOT NULL
+           THEN (u.ultimo_km + s.servicio_intervalo_km) - veh.km_actual END`;
+
+const SQL_DIAS_RESTANTES = `CASE WHEN s.servicio_intervalo_meses IS NOT NULL
+           THEN EXTRACT(DAY FROM (u.ultima_fecha + (s.servicio_intervalo_meses || ' months')::interval) - now())::int END`;
+
+/** Vencido por km, o por tiempo. Vence por lo que ocurra primero. */
+const SQL_VENCIDO = `(
+        (s.servicio_intervalo_km IS NOT NULL AND u.ultimo_km IS NOT NULL AND veh.km_actual IS NOT NULL
+         AND veh.km_actual >= u.ultimo_km + s.servicio_intervalo_km)
+        OR
+        (s.servicio_intervalo_meses IS NOT NULL
+         AND now() >= u.ultima_fecha + (s.servicio_intervalo_meses || ' months')::interval)
+      )`;
+
+/**
+ * CTEs comunes: los servicios que tienen intervalo configurado, y la ultima vez
+ * que cada uno se le hizo a cada vehiculo.
+ *
+ * @param filtroVehiculo predicado SQL extra sobre `ultimo` (la ficha mira un
+ *   solo vehiculo; el listado global, todos).
+ */
+function cteServiciosYUltimo(
+  tP: string,
+  tVen: string,
+  tIt: string,
+  filtroVehiculo: string
+): string {
+  return `
+    WITH servicios AS (
+      -- Servicios con algun intervalo configurado.
+      SELECT p.id, p.nombre, p.servicio_intervalo_km, p.servicio_intervalo_meses
+        FROM ${tP} p
+       WHERE p.empresa_id = $1::uuid
+         AND p.tipo_producto = 'servicio'
+         AND COALESCE(p.activo, true) = true
+         AND (p.servicio_intervalo_km IS NOT NULL OR p.servicio_intervalo_meses IS NOT NULL)
+    ),
+    ultimo AS (
+      -- Ultima vez que cada servicio se hizo sobre cada vehiculo.
+      SELECT DISTINCT ON (v.vehiculo_id, i.producto_id)
+             v.vehiculo_id, i.producto_id, v.fecha AS ultima_fecha, v.km_registrado AS ultimo_km
+        FROM ${tVen} v
+        JOIN ${tIt} i ON i.venta_id = v.id AND i.empresa_id = v.empresa_id
+       WHERE v.empresa_id = $1::uuid
+         AND v.vehiculo_id IS NOT NULL
+         AND v.estado <> 'anulada'
+         AND i.producto_id IN (SELECT id FROM servicios)
+         ${filtroVehiculo}
+       ORDER BY v.vehiculo_id, i.producto_id, v.fecha DESC
+    )`;
+}
+
+/**
  * @param diasAnticipacion Ventana de aviso: incluye lo vencido y lo que vence
  *   dentro de estos dias. Por km usa una anticipacion proporcional (10% del
  *   intervalo) para avisar antes de que se pase.
@@ -70,27 +136,7 @@ export async function listProximosServicios(
 
   const { rows } = await pool().query<ProximoServicioRow>(
     `
-    WITH servicios AS (
-      -- Servicios con algun intervalo configurado.
-      SELECT p.id, p.nombre, p.servicio_intervalo_km, p.servicio_intervalo_meses
-        FROM ${tP} p
-       WHERE p.empresa_id = $1::uuid
-         AND p.tipo_producto = 'servicio'
-         AND COALESCE(p.activo, true) = true
-         AND (p.servicio_intervalo_km IS NOT NULL OR p.servicio_intervalo_meses IS NOT NULL)
-    ),
-    ultimo AS (
-      -- Ultima vez que cada servicio se hizo sobre cada vehiculo.
-      SELECT DISTINCT ON (v.vehiculo_id, i.producto_id)
-             v.vehiculo_id, i.producto_id, v.fecha AS ultima_fecha, v.km_registrado AS ultimo_km
-        FROM ${tVen} v
-        JOIN ${tIt} i ON i.venta_id = v.id AND i.empresa_id = v.empresa_id
-       WHERE v.empresa_id = $1::uuid
-         AND v.vehiculo_id IS NOT NULL
-         AND v.estado <> 'anulada'
-         AND i.producto_id IN (SELECT id FROM servicios)
-       ORDER BY v.vehiculo_id, i.producto_id, v.fecha DESC
-    )
+    ${cteServiciosYUltimo(tP, tVen, tIt, "")}
     SELECT
       veh.id::text                AS vehiculo_id,
       veh.patente,
@@ -110,23 +156,11 @@ export async function listProximosServicios(
       s.servicio_intervalo_meses  AS intervalo_meses,
       u.ultima_fecha,
       u.ultimo_km,
-      CASE WHEN s.servicio_intervalo_km IS NOT NULL AND u.ultimo_km IS NOT NULL
-           THEN u.ultimo_km + s.servicio_intervalo_km END                       AS proximo_km,
-      CASE WHEN s.servicio_intervalo_meses IS NOT NULL
-           THEN u.ultima_fecha + (s.servicio_intervalo_meses || ' months')::interval END AS proxima_fecha,
-      CASE WHEN s.servicio_intervalo_km IS NOT NULL AND u.ultimo_km IS NOT NULL AND veh.km_actual IS NOT NULL
-           THEN (u.ultimo_km + s.servicio_intervalo_km) - veh.km_actual END     AS km_restantes,
-      CASE WHEN s.servicio_intervalo_meses IS NOT NULL
-           THEN EXTRACT(DAY FROM (u.ultima_fecha + (s.servicio_intervalo_meses || ' months')::interval) - now())::int END AS dias_restantes,
-      (
-        -- Vencido por km...
-        (s.servicio_intervalo_km IS NOT NULL AND u.ultimo_km IS NOT NULL AND veh.km_actual IS NOT NULL
-         AND veh.km_actual >= u.ultimo_km + s.servicio_intervalo_km)
-        OR
-        -- ...o por tiempo.
-        (s.servicio_intervalo_meses IS NOT NULL
-         AND now() >= u.ultima_fecha + (s.servicio_intervalo_meses || ' months')::interval)
-      )                                                                          AS vencido
+      ${SQL_PROXIMO_KM}    AS proximo_km,
+      ${SQL_PROXIMA_FECHA} AS proxima_fecha,
+      ${SQL_KM_RESTANTES}  AS km_restantes,
+      ${SQL_DIAS_RESTANTES} AS dias_restantes,
+      ${SQL_VENCIDO}       AS vencido
       FROM ultimo u
       JOIN servicios s ON s.id = u.producto_id
       JOIN ${tVeh} veh ON veh.id = u.vehiculo_id AND veh.empresa_id = $1::uuid
@@ -134,10 +168,7 @@ export async function listProximosServicios(
      WHERE COALESCE(veh.activo, true) = true
        AND (
          -- Vencido por km o por tiempo...
-         (s.servicio_intervalo_km IS NOT NULL AND u.ultimo_km IS NOT NULL AND veh.km_actual IS NOT NULL
-          AND veh.km_actual >= u.ultimo_km + s.servicio_intervalo_km)
-         OR (s.servicio_intervalo_meses IS NOT NULL
-             AND now() >= u.ultima_fecha + (s.servicio_intervalo_meses || ' months')::interval)
+         ${SQL_VENCIDO}
          OR (
            -- ...o por vencer dentro de la ventana de aviso.
            $3::boolean = false
@@ -155,6 +186,68 @@ export async function listProximosServicios(
      LIMIT 2000
     `,
     [empresaId, String(dias), opts.soloVencidos === true]
+  );
+  return rows;
+}
+
+
+/** Estado de un servicio para UN vehiculo, este vencido o no. */
+export interface EstadoServicioVehiculoRow {
+  producto_id: string;
+  servicio_nombre: string;
+  intervalo_km: string | number | null;
+  intervalo_meses: number | null;
+  ultima_fecha: string;
+  ultimo_km: string | number | null;
+  proximo_km: string | number | null;
+  proxima_fecha: string | null;
+  km_restantes: string | number | null;
+  dias_restantes: number | null;
+  vencido: boolean;
+}
+
+/**
+ * Contesta "cuanto me falta para el mantenimiento" de un vehiculo puntual.
+ *
+ * A diferencia de listProximosServicios, que es la lista de avisos y por eso
+ * solo trae lo vencido o por vencer, aca vienen TODOS los servicios que alguna
+ * vez se le hicieron al auto, falten 200 km o 4.000. Si el cliente llama, el
+ * dato tiene que estar igual.
+ *
+ * Ordenado por urgencia: primero lo vencido, despues lo que esta mas cerca.
+ */
+export async function listEstadoServiciosDeVehiculo(
+  schemaRaw: string,
+  empresaId: string,
+  vehiculoId: string
+): Promise<EstadoServicioVehiculoRow[]> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  const tVeh = quoteSchemaTable(schema, "vehiculos");
+  const tVen = quoteSchemaTable(schema, "ventas");
+  const tIt = quoteSchemaTable(schema, "ventas_items");
+  const tP = quoteSchemaTable(schema, "productos");
+
+  const { rows } = await pool().query<EstadoServicioVehiculoRow>(
+    `
+    ${cteServiciosYUltimo(tP, tVen, tIt, "AND v.vehiculo_id = $2::uuid")}
+    SELECT
+      s.id::text                 AS producto_id,
+      s.nombre                   AS servicio_nombre,
+      s.servicio_intervalo_km    AS intervalo_km,
+      s.servicio_intervalo_meses AS intervalo_meses,
+      u.ultima_fecha,
+      u.ultimo_km,
+      ${SQL_PROXIMO_KM}     AS proximo_km,
+      ${SQL_PROXIMA_FECHA}  AS proxima_fecha,
+      ${SQL_KM_RESTANTES}   AS km_restantes,
+      ${SQL_DIAS_RESTANTES} AS dias_restantes,
+      ${SQL_VENCIDO}        AS vencido
+      FROM ultimo u
+      JOIN servicios s ON s.id = u.producto_id
+      JOIN ${tVeh} veh ON veh.id = u.vehiculo_id AND veh.empresa_id = $1::uuid
+     ORDER BY vencido DESC, dias_restantes NULLS LAST, km_restantes NULLS LAST
+    `,
+    [empresaId, vehiculoId]
   );
   return rows;
 }

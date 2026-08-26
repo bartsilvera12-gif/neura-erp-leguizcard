@@ -1,5 +1,11 @@
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import type { NuevoVehiculoInput, ProximoServicio, ServicioVehiculo, Vehiculo } from "./types";
+import type {
+  EstadoServicioVehiculo,
+  NuevoVehiculoInput,
+  ProximoServicio,
+  ServicioVehiculo,
+  Vehiculo,
+} from "./types";
 
 type Resp<T> = { success?: boolean; data?: T; error?: string };
 
@@ -26,16 +32,26 @@ export async function getVehiculos(opts: { clienteId?: string; soloActivos?: boo
   }
 }
 
-export async function getVehiculo(
-  id: string
-): Promise<{ vehiculo: Vehiculo; servicios: ServicioVehiculo[] } | null> {
+export async function getVehiculo(id: string): Promise<{
+  vehiculo: Vehiculo;
+  servicios: ServicioVehiculo[];
+  proximos: EstadoServicioVehiculo[];
+} | null> {
   try {
     const res = await fetchWithSupabaseSession(`/api/vehiculos/${encodeURIComponent(id)}`, {
       cache: "no-store",
     });
-    const json = await leer<{ vehiculo?: Vehiculo; servicios?: ServicioVehiculo[] }>(res, "getVehiculo");
+    const json = await leer<{
+      vehiculo?: Vehiculo;
+      servicios?: ServicioVehiculo[];
+      proximos?: EstadoServicioVehiculo[];
+    }>(res, "getVehiculo");
     if (!json.data?.vehiculo) return null;
-    return { vehiculo: json.data.vehiculo, servicios: json.data.servicios ?? [] };
+    return {
+      vehiculo: json.data.vehiculo,
+      servicios: json.data.servicios ?? [],
+      proximos: json.data.proximos ?? [],
+    };
   } catch (e) {
     console.error("[vehiculos] getVehiculo:", e);
     return null;

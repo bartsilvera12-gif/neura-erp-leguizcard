@@ -59,6 +59,19 @@ export interface NuevoVehiculoInput {
 }
 
 /** Una atencion del vehiculo: la venta que la registro. */
+/** Una linea de la atencion: el servicio hecho, o el insumo que consumio. */
+export interface ItemServicioVehiculo {
+  producto_id: string | null;
+  producto_nombre: string;
+  sku: string | null;
+  marca: string | null;
+  cantidad: number;
+  unidad_medida: string | null;
+  presentacion_nombre: string | null;
+  total_linea: number;
+  es_servicio: boolean;
+}
+
 export interface ServicioVehiculo {
   venta_id: string;
   numero_control: string;
@@ -66,8 +79,26 @@ export interface ServicioVehiculo {
   estado: string;
   total: number;
   km_registrado: number | null;
-  /** Nombres de los items de la venta, para leer de un vistazo que se le hizo. */
-  detalle: string[];
+  /** Km recorridos desde la visita anterior. NULL si falta alguna lectura. */
+  km_recorridos: number | null;
+  /** Lo que anoto el taller en la venta. */
+  observaciones: string | null;
+  items: ItemServicioVehiculo[];
+}
+
+/** Cuando toca el proximo de un servicio, para ESTE vehiculo. */
+export interface EstadoServicioVehiculo {
+  producto_id: string;
+  servicio_nombre: string;
+  intervalo_km: number | null;
+  intervalo_meses: number | null;
+  ultima_fecha: string;
+  ultimo_km: number | null;
+  proximo_km: number | null;
+  proxima_fecha: string | null;
+  km_restantes: number | null;
+  dias_restantes: number | null;
+  vencido: boolean;
 }
 
 /**

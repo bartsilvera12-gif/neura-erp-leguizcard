@@ -10,8 +10,14 @@ import {
   findVehiculoByPatente,
   listServiciosDeVehiculo,
 } from "@/lib/vehiculos/server/vehiculos-pg";
+import { listEstadoServiciosDeVehiculo } from "@/lib/vehiculos/server/proximos-servicios-pg";
 import { mapVehiculoRow } from "../route";
-import { COMBUSTIBLES, type Combustible, type ServicioVehiculo } from "@/lib/vehiculos/types";
+import {
+  COMBUSTIBLES,
+  type Combustible,
+  type ServicioVehiculo,
+  type EstadoServicioVehiculo,
+} from "@/lib/vehiculos/types";
 
 function txt(v: unknown): string | null {
   if (v == null) return null;
@@ -30,7 +36,11 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
     const row = await getVehiculo(schema, ctx.auth.empresa_id, id);
     if (!row) return NextResponse.json(errorResponse("Vehículo no encontrado."), { status: 404 });
 
-    const servRows = await listServiciosDeVehiculo(schema, ctx.auth.empresa_id, id);
+    const [servRows, estadoRows] = await Promise.all([
+      listServiciosDeVehiculo(schema, ctx.auth.empresa_id, id),
+      listEstadoServiciosDeVehiculo(schema, ctx.auth.empresa_id, id),
+    ]);
+
     const servicios: ServicioVehiculo[] = servRows.map((s) => ({
       venta_id: s.venta_id,
       numero_control: s.numero_control,
@@ -38,11 +48,37 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
       estado: s.estado,
       total: Number(s.total ?? 0),
       km_registrado: s.km_registrado != null ? Number(s.km_registrado) : null,
-      detalle: s.detalle ?? [],
+      km_recorridos: s.km_recorridos != null ? Number(s.km_recorridos) : null,
+      observaciones: s.observaciones,
+      items: (s.items ?? []).map((i) => ({
+        producto_id: i.producto_id,
+        producto_nombre: i.producto_nombre,
+        sku: i.sku,
+        marca: i.marca,
+        cantidad: Number(i.cantidad ?? 0),
+        unidad_medida: i.unidad_medida,
+        presentacion_nombre: i.presentacion_nombre,
+        total_linea: Number(i.total_linea ?? 0),
+        es_servicio: i.es_servicio === true,
+      })),
+    }));
+
+    const proximos: EstadoServicioVehiculo[] = estadoRows.map((e) => ({
+      producto_id: e.producto_id,
+      servicio_nombre: e.servicio_nombre,
+      intervalo_km: e.intervalo_km != null ? Number(e.intervalo_km) : null,
+      intervalo_meses: e.intervalo_meses,
+      ultima_fecha: e.ultima_fecha,
+      ultimo_km: e.ultimo_km != null ? Number(e.ultimo_km) : null,
+      proximo_km: e.proximo_km != null ? Number(e.proximo_km) : null,
+      proxima_fecha: e.proxima_fecha,
+      km_restantes: e.km_restantes != null ? Number(e.km_restantes) : null,
+      dias_restantes: e.dias_restantes,
+      vencido: e.vencido === true,
     }));
 
     return NextResponse.json(
-      successResponse({ vehiculo: mapVehiculoRow(row), servicios })
+      successResponse({ vehiculo: mapVehiculoRow(row), servicios, proximos })
     );
   } catch (err) {
     console.error("[/api/vehiculos/[id] GET]", err instanceof Error ? err.message : err);

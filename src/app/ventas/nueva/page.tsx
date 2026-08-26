@@ -2,15 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Plus, Minus, Trash2, ImageIcon, Wallet } from "lucide-react";
+import { Search, Plus, Minus, Trash2, ImageIcon, Wallet, Car, AlertTriangle, Loader2 } from "lucide-react";
 import MontoInput from "@/components/ui/MontoInput";
 import { FancySelect } from "@/components/ui/FancySelect";
 import ProductPickerModal, { type ProductoPickerItem, type AgregarVentaPayload } from "@/components/inventario/ProductPickerModal";
 import { saveVenta, type FaltanteStock } from "@/lib/ventas/storage";
 import { getProductos } from "@/lib/inventario/storage";
 import CrearClienteModal, { type ClienteCreado } from "@/components/clientes/CrearClienteModal";
-import { getVehiculos } from "@/lib/vehiculos/storage";
-import type { Vehiculo } from "@/lib/vehiculos/types";
+import { crearVehiculo, getVehiculos } from "@/lib/vehiculos/storage";
+import { normalizarPatente, type Vehiculo } from "@/lib/vehiculos/types";
 import { generarYAbrirRecibo } from "@/lib/recibos/client";
 import type { TipoIvaVenta, TipoVenta, MonedaVenta, LineaVenta, MetodoPago, TipoPrecioVenta } from "@/lib/ventas/types";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
@@ -181,11 +181,20 @@ export default function NuevaVentaPage() {
   // Nota de remisión: activada si el cliente la usa; toggle manual solo con cliente.
   const [generaNotaRemision, setGeneraNotaRemision] = useState(false);
 
-  // Vehiculo atendido (lubricentro). Opcional: una venta de mostrador no lo usa.
-  // Si hay cliente seleccionado, la lista se acota a sus autos.
+  // ── Vehiculo atendido (lubricentro) ───────────────────────────────────────
+  // En un lubricentro entra el AUTO, no la persona: se busca por patente y el
+  // cliente sale de ahi. Por eso la lista no se acota al cliente elegido.
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
   const [vehiculoId, setVehiculoId] = useState("");
+  const [vehiculoQuery, setVehiculoQuery] = useState("");
+  const [vehiculoOpen, setVehiculoOpen] = useState(false);
+  const vehiculoContainerRef = useRef<HTMLDivElement>(null);
   const [kmRegistrado, setKmRegistrado] = useState("");
+  // Alta rapida: la mayoria de los autos no van a estar cargados todavia, y
+  // mandar al cajero a otra pantalla en medio de la venta pierde el carrito.
+  const [altaVehiculo, setAltaVehiculo] = useState<{ patente: string; marca: string; modelo: string } | null>(null);
+  const [creandoVehiculo, setCreandoVehiculo] = useState(false);
+  const [errorVehiculo, setErrorVehiculo] = useState<string | null>(null);
 
   // Modal de alta rápida de cliente (crea en el módulo Clientes + lo selecciona).
   const [showCrearCliente, setShowCrearCliente] = useState(false);
@@ -204,19 +213,17 @@ export default function NuevaVentaPage() {
     return () => { cancel = true; };
   }, [clienteId]);
 
-  // Los vehiculos se recargan al cambiar de cliente: con cliente, solo los suyos.
+  // Todos los vehiculos activos, sin filtrar por cliente: se busca por patente,
+  // que es el dato que el cajero tiene en la mano cuando el auto entra.
   useEffect(() => {
     let cancel = false;
-    getVehiculos({ soloActivos: true, clienteId: clienteId || undefined }).then((rows) => {
-      if (cancel) return;
-      setVehiculos(rows);
-      // Si el vehiculo elegido no pertenece al cliente nuevo, se deselecciona.
-      setVehiculoId((prev) => (prev && rows.some((v) => v.id === prev) ? prev : ""));
+    getVehiculos({ soloActivos: true }).then((rows) => {
+      if (!cancel) setVehiculos(rows);
     });
     return () => {
       cancel = true;
     };
-  }, [clienteId]);
+  }, []);
 
   function handleClienteCreado(c: ClienteCreado) {
     setClientes((prev) => [c, ...prev.filter((x) => x.id !== c.id)]);
@@ -592,6 +599,9 @@ export default function NuevaVentaPage() {
       if (clienteContainerRef.current && !clienteContainerRef.current.contains(e.target as Node)) {
         setClienteOpen(false);
       }
+      if (vehiculoContainerRef.current && !vehiculoContainerRef.current.contains(e.target as Node)) {
+        setVehiculoOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -614,7 +624,100 @@ export default function NuevaVentaPage() {
   // Condición de venta: si es Crédito, exigir plazo de al menos 1 día y un cliente.
   const plazoDiasNum = parseInt(plazoDias) || 0;
   const creditoValido = tipoVenta === "CONTADO" || (plazoDiasNum >= 1 && !!clienteId);
-  const ventaValida   = items.length > 0 && creditoValido;
+  // ── Vehiculo: seleccion, busqueda y reglas ────────────────────────────────
+  const vehiculoSel = vehiculos.find((v) => v.id === vehiculoId) ?? null;
+
+  /**
+   * Un servicio (cambio de aceite, etc.) le pertenece a un auto: sin vehiculo
+   * no entra al historial del vehiculo ni dispara el aviso de proximo servicio.
+   * Una venta de mostrador (un bidon de aceite y listo) no lo necesita.
+   */
+  const hayServicio = items.some(
+    (i) => productos.find((p) => p.id === i.producto_id)?.tipo_producto === "servicio"
+  );
+  const faltaVehiculo = hayServicio && !vehiculoId;
+
+  /** El odometro no retrocede: si la lectura es menor, el backend la ignora. */
+  const kmNum = kmRegistrado.trim() === "" ? null : Number(kmRegistrado);
+  const kmRetrocede =
+    kmNum != null &&
+    Number.isFinite(kmNum) &&
+    vehiculoSel?.km_actual != null &&
+    kmNum < vehiculoSel.km_actual;
+
+  /** El auto esta a nombre de otro cliente que el elegido en la venta. */
+  const vehiculoDeOtroCliente =
+    !!vehiculoSel?.cliente_id && !!clienteId && vehiculoSel.cliente_id !== clienteId;
+
+  const vehiculosFiltrados = (() => {
+    const q = vehiculoQuery.trim();
+    const base = q === ""
+      ? vehiculos
+      : vehiculos.filter((v) => {
+          // La patente se compara normalizada: "ABC 123" encuentra "abc-123".
+          const pat = normalizarPatente(v.patente);
+          if (pat.includes(normalizarPatente(q))) return true;
+          const texto = [v.marca, v.modelo, v.cliente_nombre].filter(Boolean).join(" ");
+          return productoMatchesQuery(q, texto, null);
+        });
+    // Con cliente elegido, sus autos primero: casi siempre es uno de esos.
+    if (!clienteId) return base.slice(0, 50);
+    return [...base]
+      .sort((a, b) => Number(b.cliente_id === clienteId) - Number(a.cliente_id === clienteId))
+      .slice(0, 50);
+  })();
+
+  /** Al elegir el auto, si la venta no tiene cliente se completa con el dueño. */
+  function elegirVehiculo(v: Vehiculo) {
+    setVehiculoId(v.id);
+    setVehiculoQuery("");
+    setVehiculoOpen(false);
+    setErrorVehiculo(null);
+    setKmRegistrado("");
+    if (!clienteId && v.cliente_id) {
+      const c = clientes.find((x) => x.id === v.cliente_id);
+      if (c) {
+        setClienteId(c.id);
+        setClienteQuery("");
+        setGeneraNotaRemision(c.usa_nota_remision);
+      }
+    }
+  }
+
+  function limpiarVehiculo() {
+    setVehiculoId("");
+    setVehiculoQuery("");
+    setKmRegistrado("");
+    setErrorVehiculo(null);
+  }
+
+  /** Alta rapida: solo lo indispensable, el resto se completa despues. */
+  async function guardarVehiculoNuevo() {
+    if (!altaVehiculo) return;
+    const patente = altaVehiculo.patente.trim();
+    if (normalizarPatente(patente).length < 3) {
+      setErrorVehiculo("La patente es muy corta.");
+      return;
+    }
+    setCreandoVehiculo(true);
+    setErrorVehiculo(null);
+    const r = await crearVehiculo({
+      patente,
+      marca: altaVehiculo.marca.trim() || null,
+      modelo: altaVehiculo.modelo.trim() || null,
+      cliente_id: clienteId || null,
+    });
+    setCreandoVehiculo(false);
+    if (!r.ok) {
+      setErrorVehiculo(r.error);
+      return;
+    }
+    setVehiculos((prev) => [r.vehiculo, ...prev.filter((v) => v.id !== r.vehiculo.id)]);
+    setAltaVehiculo(null);
+    elegirVehiculo(r.vehiculo);
+  }
+
+  const ventaValida   = items.length > 0 && creditoValido && !faltaVehiculo;
 
   // Cliente (opcional) — selección + filtrado del buscador.
   const clienteSel = clientes.find((c) => c.id === clienteId) ?? null;
@@ -1141,54 +1244,198 @@ export default function NuevaVentaPage() {
               )}
             </div>
 
-            {/* Vehiculo atendido (lubricentro) */}
-            <div>
+            {/* ── Vehiculo atendido (lubricentro) ────────────────────────────
+                Se busca por patente porque es lo que el cajero tiene en la mano
+                cuando el auto entra; el cliente se completa solo desde el auto. */}
+            <div ref={vehiculoContainerRef} className="relative">
               <label className={labelClass}>
-                Vehículo <span className="text-xs font-normal text-gray-400">(opcional)</span>
+                Vehículo{" "}
+                {faltaVehiculo ? (
+                  <span className="text-xs font-semibold text-amber-600">(obligatorio: hay un servicio)</span>
+                ) : (
+                  <span className="text-xs font-normal text-gray-400">(opcional)</span>
+                )}
               </label>
-              <select
-                value={vehiculoId}
-                onChange={(e) => setVehiculoId(e.target.value)}
-                className={inputClass}
-              >
-                <option value="">Sin vehículo</option>
-                {vehiculos.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.patente}
-                    {[v.marca, v.modelo].filter(Boolean).length > 0
-                      ? ` — ${[v.marca, v.modelo].filter(Boolean).join(" ")}`
-                      : ""}
-                  </option>
-                ))}
-              </select>
 
-              {vehiculoId && (
-                <div className="mt-2">
-                  <label className="mb-1 block text-xs font-medium text-slate-600">
-                    Kilometraje al momento del servicio
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Car className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={vehiculoSel ? vehiculoSel.patente : vehiculoQuery}
+                    onChange={(e) => {
+                      if (vehiculoId) setVehiculoId("");
+                      setVehiculoQuery(e.target.value);
+                      setVehiculoOpen(true);
+                    }}
+                    onFocus={() => setVehiculoOpen(true)}
+                    placeholder="Buscar por patente, marca o cliente…"
+                    className={`${inputClass} pl-9 ${vehiculoSel ? "font-semibold uppercase tracking-wide" : ""} ${
+                      faltaVehiculo ? "border-amber-400" : ""
+                    }`}
+                  />
+                </div>
+                {vehiculoSel && (
+                  <button
+                    type="button"
+                    onClick={limpiarVehiculo}
+                    className="shrink-0 rounded-lg border border-slate-200 px-3 text-xs text-slate-500 hover:bg-slate-50"
+                  >
+                    Quitar
+                  </button>
+                )}
+              </div>
+
+              {/* Resultados de la busqueda */}
+              {vehiculoOpen && !vehiculoSel && !altaVehiculo && (
+                <div className="absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                  {vehiculosFiltrados.map((v) => (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => elegirVehiculo(v)}
+                      className="block w-full px-3 py-2 text-left hover:bg-slate-50"
+                    >
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="font-mono text-sm font-semibold uppercase text-slate-800">{v.patente}</span>
+                        {v.km_actual != null && (
+                          <span className="shrink-0 font-mono text-[11px] text-slate-400">
+                            {Math.round(v.km_actual).toLocaleString("es-PY")} km
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        {[v.marca, v.modelo].filter(Boolean).join(" ") || "Sin marca ni modelo"}
+                        {v.cliente_nombre && <span className="text-slate-400"> · {v.cliente_nombre}</span>}
+                      </p>
+                    </button>
+                  ))}
+
+                  {/* El auto que no esta cargado se crea sin salir de la venta:
+                      mandar al cajero a otra pantalla le vacia el carrito. */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAltaVehiculo({ patente: vehiculoQuery.trim().toUpperCase(), marca: "", modelo: "" });
+                      setVehiculoOpen(false);
+                    }}
+                    className="flex w-full items-center gap-2 border-t border-slate-100 bg-slate-50/60 px-3 py-2 text-left text-xs font-semibold text-[#0284C7] hover:bg-slate-100"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    {vehiculoQuery.trim()
+                      ? `Cargar el vehículo "${vehiculoQuery.trim().toUpperCase()}"`
+                      : "Cargar un vehículo nuevo"}
+                  </button>
+                </div>
+              )}
+
+              {/* Alta rapida en linea */}
+              {altaVehiculo && (
+                <div className="mt-2 rounded-lg border border-[#0EA5E9]/40 bg-[#0EA5E9]/[0.05] p-3">
+                  <p className="mb-2 text-xs font-semibold text-[#0284C7]">Vehículo nuevo</p>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <input
+                      autoFocus
+                      value={altaVehiculo.patente}
+                      onChange={(e) => setAltaVehiculo({ ...altaVehiculo, patente: e.target.value.toUpperCase() })}
+                      placeholder="Patente"
+                      className={`${inputClass} font-mono font-semibold uppercase`}
+                    />
+                    <input
+                      value={altaVehiculo.marca}
+                      onChange={(e) => setAltaVehiculo({ ...altaVehiculo, marca: e.target.value })}
+                      placeholder="Marca"
+                      className={inputClass}
+                    />
+                    <input
+                      value={altaVehiculo.modelo}
+                      onChange={(e) => setAltaVehiculo({ ...altaVehiculo, modelo: e.target.value })}
+                      placeholder="Modelo"
+                      className={inputClass}
+                    />
+                  </div>
+                  {errorVehiculo && <p className="mt-1.5 text-[11px] text-red-600">{errorVehiculo}</p>}
+                  <p className="mt-1.5 text-[11px] text-slate-500">
+                    {clienteId
+                      ? "Queda asignado al cliente de esta venta."
+                      : "Queda sin cliente: se le puede asignar después desde su ficha."}
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={guardarVehiculoNuevo}
+                      disabled={creandoVehiculo}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-[#0EA5E9] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50"
+                    >
+                      {creandoVehiculo && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      Guardar y usar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setAltaVehiculo(null); setErrorVehiculo(null); }}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-white"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Confirmacion de que se agarro el auto correcto + odometro */}
+              {vehiculoSel && (
+                <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+                  <p className="text-sm font-medium text-slate-800">
+                    {[vehiculoSel.marca, vehiculoSel.modelo].filter(Boolean).join(" ") || "Sin marca ni modelo"}
+                    {vehiculoSel.anio ? <span className="text-slate-400"> · {vehiculoSel.anio}</span> : null}
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    {vehiculoSel.cliente_nombre ?? "Sin cliente asignado"}
+                    {vehiculoSel.km_actual != null && (
+                      <> · último odómetro <strong className="font-semibold text-slate-700">
+                        {Math.round(vehiculoSel.km_actual).toLocaleString("es-PY")} km
+                      </strong></>
+                    )}
+                  </p>
+
+                  {vehiculoDeOtroCliente && (
+                    <p className="mt-1.5 flex items-start gap-1 text-[11px] text-amber-700">
+                      <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
+                      Este vehículo figura a nombre de otro cliente. La venta se registra igual.
+                    </p>
+                  )}
+
+                  <label className="mt-2 mb-1 block text-xs font-medium text-slate-600">
+                    Kilometraje de hoy
                   </label>
                   <input
                     type="number"
                     min={0}
                     value={kmRegistrado}
                     onChange={(e) => setKmRegistrado(e.target.value)}
-                    placeholder={(() => {
-                      const v = vehiculos.find((x) => x.id === vehiculoId);
-                      return v?.km_actual != null ? String(Math.round(v.km_actual)) : "0";
-                    })()}
-                    className={inputClass}
+                    placeholder={vehiculoSel.km_actual != null ? String(Math.round(vehiculoSel.km_actual)) : "0"}
+                    className={`${inputClass} ${kmRetrocede ? "border-amber-400" : ""}`}
                   />
-                  <p className="mt-1 text-[11px] text-gray-400">
-                    Queda en el historial del vehículo. Si es mayor al registrado, actualiza su odómetro.
-                  </p>
+                  {kmRetrocede ? (
+                    // Sin aviso el cajero cree que la lectura se guardo, cuando
+                    // el backend la descarta por ser menor a la registrada.
+                    <p className="mt-1 flex items-start gap-1 text-[11px] text-amber-700">
+                      <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
+                      Es menor al último registrado. Queda en el historial de la venta, pero el
+                      odómetro del vehículo no se actualiza: no puede retroceder.
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-gray-400">
+                      Queda en el historial del vehículo y define cuándo toca el próximo servicio.
+                    </p>
+                  )}
                 </div>
               )}
 
-              {vehiculos.length === 0 && (
-                <p className="mt-1 text-[11px] text-gray-400">
-                  {clienteId
-                    ? "Este cliente no tiene vehículos cargados."
-                    : "No hay vehículos cargados todavía."}
+              {faltaVehiculo && !altaVehiculo && (
+                <p className="mt-1.5 flex items-start gap-1 text-[11px] text-amber-700">
+                  <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
+                  Esta venta incluye un servicio. Sin vehículo no queda en su historial ni genera el
+                  aviso del próximo mantenimiento.
                 </p>
               )}
             </div>
@@ -1745,6 +1992,12 @@ export default function NuevaVentaPage() {
           {/* Acciones — stack vertical full-width en mobile (mas facil de tappear),
               fila en sm+. Confirmar en orden visual primero (primary). */}
           <div className="mt-6 flex flex-col-reverse sm:flex-row gap-3">
+            {faltaVehiculo && (
+              <p className="flex w-full items-center gap-1.5 text-xs font-medium text-amber-700 sm:mr-auto sm:w-auto">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                Falta elegir el vehículo, arriba: esta venta incluye un servicio.
+              </p>
+            )}
             <button
               type="button"
               onClick={() => router.push("/ventas")}
@@ -1757,7 +2010,7 @@ export default function NuevaVentaPage() {
               onClick={handleSubmit}
               disabled={!ventaValida || guardando || efectivoInsuficiente || mixtoInvalido}
               aria-busy={guardando}
-              title={efectivoInsuficiente ? "El efectivo recibido no cubre el total a cobrar." : mixtoInvalido ? "El cobro mixto no cubre el total o falta la entidad." : undefined}
+              title={faltaVehiculo ? "Elegí el vehículo: la venta incluye un servicio." : efectivoInsuficiente ? "El efectivo recibido no cubre el total a cobrar." : mixtoInvalido ? "El cobro mixto no cubre el total o falta la entidad." : undefined}
               className="bg-[#0EA5E9] hover:bg-[#0284C7] text-white px-6 py-3 rounded-lg text-sm font-medium transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 min-h-[48px] w-full sm:w-auto"
             >
               {guardando ? "Guardando…" : "Confirmar venta"}

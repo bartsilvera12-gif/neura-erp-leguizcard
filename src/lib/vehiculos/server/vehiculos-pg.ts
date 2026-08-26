@@ -29,6 +29,8 @@ export interface VehiculoRow {
   color: string | null;
   km_actual: string | number | null;
   km_actualizado_at: string | null;
+  aceite_tipo: string | null;
+  aceite_litros: string | number | null;
   observaciones: string | null;
   activo: boolean;
   created_at: string;
@@ -44,7 +46,8 @@ const COLS = `v.id::text AS id, v.empresa_id::text AS empresa_id, v.cliente_id::
                 NULLIF(btrim(c.nombre), '')
               ) AS cliente_nombre,
               v.patente, v.marca, v.modelo, v.anio, v.motor, v.combustible, v.vin, v.color,
-              v.km_actual, v.km_actualizado_at, v.observaciones, v.activo, v.created_at, v.updated_at`;
+              v.km_actual, v.km_actualizado_at, v.aceite_tipo, v.aceite_litros,
+              v.observaciones, v.activo, v.created_at, v.updated_at`;
 
 function from(schema: string): string {
   return `${quoteSchemaTable(schema, "vehiculos")} v
@@ -117,6 +120,8 @@ export interface VehiculoInput {
   vin?: string | null;
   color?: string | null;
   km_actual?: number | null;
+  aceite_tipo?: string | null;
+  aceite_litros?: number | null;
   observaciones?: string | null;
   activo?: boolean;
 }
@@ -132,9 +137,10 @@ export async function insertVehiculo(
   const { rows } = await pool().query<{ id: string }>(
     `INSERT INTO ${t}
        (empresa_id, cliente_id, patente, marca, modelo, anio, motor, combustible,
-        vin, color, km_actual, km_actualizado_at, observaciones, activo, created_by)
+        vin, color, km_actual, km_actualizado_at, aceite_tipo, aceite_litros,
+        observaciones, activo, created_by)
      VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-             CASE WHEN $11::numeric IS NULL THEN NULL ELSE now() END, $12, $13, $14::uuid)
+             CASE WHEN $11::numeric IS NULL THEN NULL ELSE now() END, $12, $13, $14, $15, $16::uuid)
      RETURNING id::text AS id`,
     [
       empresaId,
@@ -148,6 +154,8 @@ export async function insertVehiculo(
       d.vin ?? null,
       d.color ?? null,
       d.km_actual ?? null,
+      d.aceite_tipo ?? null,
+      d.aceite_litros ?? null,
       d.observaciones ?? null,
       d.activo ?? true,
       createdBy,
@@ -183,6 +191,8 @@ export async function updateVehiculo(
   if (d.combustible !== undefined) push("combustible", d.combustible);
   if (d.vin !== undefined) push("vin", d.vin);
   if (d.color !== undefined) push("color", d.color);
+  if (d.aceite_tipo !== undefined) push("aceite_tipo", d.aceite_tipo);
+  if (d.aceite_litros !== undefined) push("aceite_litros", d.aceite_litros);
   if (d.observaciones !== undefined) push("observaciones", d.observaciones);
   if (d.activo !== undefined) push("activo", d.activo);
   if (d.km_actual !== undefined) {
@@ -335,6 +345,43 @@ export async function actualizarKmSiAvanza(
       WHERE empresa_id = $1::uuid AND id = $2::uuid
         AND (km_actual IS NULL OR km_actual < $3::numeric)`,
     [empresaId, vehiculoId, km]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+
+/** Cuantas ventas quedarian huerfanas si se borrara este vehiculo. */
+export async function contarVentasDeVehiculo(
+  schemaRaw: string,
+  empresaId: string,
+  id: string
+): Promise<number> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  const t = quoteSchemaTable(schema, "ventas");
+  const { rows } = await pool().query<{ n: string }>(
+    `SELECT COUNT(*)::text AS n FROM ${t}
+      WHERE empresa_id = $1::uuid AND vehiculo_id = $2::uuid`,
+    [empresaId, id]
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
+/**
+ * Borra el vehiculo de verdad. Solo debe llamarse cuando no tiene ninguna venta
+ * asociada: la FK ventas.vehiculo_id es ON DELETE SET NULL, asi que un borrado
+ * con historial no falla — deja las ventas huerfanas y pierde el historial del
+ * auto sin avisar. Quien llama tiene que verificarlo antes.
+ */
+export async function eliminarVehiculo(
+  schemaRaw: string,
+  empresaId: string,
+  id: string
+): Promise<boolean> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  const t = quoteSchemaTable(schema, "vehiculos");
+  const r = await pool().query(
+    `DELETE FROM ${t} WHERE empresa_id = $1::uuid AND id = $2::uuid`,
+    [empresaId, id]
   );
   return (r.rowCount ?? 0) > 0;
 }

@@ -30,6 +30,8 @@ export function mapVehiculoRow(r: VehiculoRow): Vehiculo {
     color: r.color,
     km_actual: r.km_actual != null ? Number(r.km_actual) : null,
     km_actualizado_at: r.km_actualizado_at,
+    aceite_tipo: r.aceite_tipo,
+    aceite_litros: r.aceite_litros != null ? Number(r.aceite_litros) : null,
     observaciones: r.observaciones,
     activo: Boolean(r.activo),
     created_at: r.created_at,
@@ -105,6 +107,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(errorResponse("Kilometraje inválido."), { status: 400 });
     }
 
+    // Litros del cambio completo. El tope de 100 corta un cero de mas al tipear
+    // y coincide con el CHECK de la tabla, para fallar aca con un mensaje claro
+    // en vez de con el error de Postgres.
+    const litrosRaw = o.aceite_litros;
+    const litros = litrosRaw == null || litrosRaw === "" ? null : Number(litrosRaw);
+    if (litros != null && (!Number.isFinite(litros) || litros <= 0 || litros > 100)) {
+      return NextResponse.json(errorResponse("Litros de aceite inválidos."), { status: 400 });
+    }
+
     const combustible = txt(o.combustible);
     if (combustible && !COMBUSTIBLES.includes(combustible as Combustible)) {
       return NextResponse.json(errorResponse("Combustible inválido."), { status: 400 });
@@ -124,6 +135,8 @@ export async function POST(request: NextRequest) {
         vin: txt(o.vin),
         color: txt(o.color),
         km_actual: km,
+        aceite_tipo: txt(o.aceite_tipo),
+        aceite_litros: litros,
         observaciones: txt(o.observaciones),
         activo: o.activo === undefined ? true : Boolean(o.activo),
       },

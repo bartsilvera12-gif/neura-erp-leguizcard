@@ -6,7 +6,9 @@ import { API_ERRORS } from "@/lib/api/errors";
 import {
   getVehiculo,
   updateVehiculo,
+  contarVentasDeVehiculo,
   desactivarVehiculo,
+  eliminarVehiculo,
   findVehiculoByPatente,
   listServiciosDeVehiculo,
 } from "@/lib/vehiculos/server/vehiculos-pg";
@@ -36,9 +38,10 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
     const row = await getVehiculo(schema, ctx.auth.empresa_id, id);
     if (!row) return NextResponse.json(errorResponse("Vehículo no encontrado."), { status: 404 });
 
-    const [servRows, estadoRows] = await Promise.all([
+    const [servRows, estadoRows, ventasAsociadas] = await Promise.all([
       listServiciosDeVehiculo(schema, ctx.auth.empresa_id, id),
       listEstadoServiciosDeVehiculo(schema, ctx.auth.empresa_id, id),
+      contarVentasDeVehiculo(schema, ctx.auth.empresa_id, id),
     ]);
 
     const servicios: ServicioVehiculo[] = servRows.map((s) => ({
@@ -78,7 +81,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
     }));
 
     return NextResponse.json(
-      successResponse({ vehiculo: mapVehiculoRow(row), servicios, proximos })
+      successResponse({ vehiculo: mapVehiculoRow(row), servicios, proximos, ventasAsociadas })
     );
   } catch (err) {
     console.error("[/api/vehiculos/[id] GET]", err instanceof Error ? err.message : err);
@@ -125,8 +128,17 @@ export async function PATCH(request: NextRequest, ctxParams: { params: Promise<{
     if (o.motor !== undefined) patch.motor = txt(o.motor);
     if (o.vin !== undefined) patch.vin = txt(o.vin);
     if (o.color !== undefined) patch.color = txt(o.color);
+    if (o.aceite_tipo !== undefined) patch.aceite_tipo = txt(o.aceite_tipo);
     if (o.observaciones !== undefined) patch.observaciones = txt(o.observaciones);
     if (o.activo !== undefined) patch.activo = Boolean(o.activo);
+
+    if (o.aceite_litros !== undefined) {
+      const l = o.aceite_litros == null || o.aceite_litros === "" ? null : Number(o.aceite_litros);
+      if (l != null && (!Number.isFinite(l) || l <= 0 || l > 100)) {
+        return NextResponse.json(errorResponse("Litros de aceite inválidos."), { status: 400 });
+      }
+      patch.aceite_litros = l;
+    }
 
     if (o.anio !== undefined) {
       const a = o.anio == null || o.anio === "" ? null : Number(o.anio);
@@ -177,18 +189,46 @@ export async function PATCH(request: NextRequest, ctxParams: { params: Promise<{
  * No se borra físicamente: las ventas históricas lo referencian y perder la
  * patente arruina el historial de servicios.
  */
+/**
+ * DELETE /api/vehiculos/[id]
+ *   - por defecto: baja logica (activo = false). El auto sale de los listados
+ *     pero conserva su historial.
+ *   - ?definitivo=1: lo borra de verdad, y SOLO si no tiene ninguna venta.
+ *
+ * El borrado real esta acotado a proposito. La FK ventas.vehiculo_id es
+ * ON DELETE SET NULL: borrar un auto con historial no da error, deja las ventas
+ * huerfanas y el historial se pierde para siempre sin que nadie se entere. Con
+ * ventas asociadas la unica opcion valida es la baja logica.
+ */
 export async function DELETE(request: NextRequest, ctxParams: { params: Promise<{ id: string }> }) {
   try {
     const ctx = await getTenantSupabaseFromAuth(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
     const schema = await fetchDataSchemaForEmpresaId(ctx.auth.empresa_id);
     const { id } = await ctxParams.params;
+    const definitivo = request.nextUrl.searchParams.get("definitivo") === "1";
+
+    if (definitivo) {
+      const ventas = await contarVentasDeVehiculo(schema, ctx.auth.empresa_id, id);
+      if (ventas > 0) {
+        return NextResponse.json(
+          errorResponse(
+            `No se puede eliminar: el vehículo tiene ${ventas} ${ventas === 1 ? "venta asociada" : "ventas asociadas"}. ` +
+              "Borrarlo dejaría esas ventas sin vehículo y se perdería su historial. Dalo de baja en su lugar."
+          ),
+          { status: 409 }
+        );
+      }
+      const borrado = await eliminarVehiculo(schema, ctx.auth.empresa_id, id);
+      if (!borrado) return NextResponse.json(errorResponse("Vehículo no encontrado."), { status: 404 });
+      return NextResponse.json(successResponse({ eliminado: true }));
+    }
 
     const ok = await desactivarVehiculo(schema, ctx.auth.empresa_id, id);
     if (!ok) return NextResponse.json(errorResponse("Vehículo no encontrado."), { status: 404 });
     return NextResponse.json(successResponse({ desactivado: true }));
   } catch (err) {
     console.error("[/api/vehiculos/[id] DELETE]", err instanceof Error ? err.message : err);
-    return NextResponse.json(errorResponse("No se pudo dar de baja el vehículo."), { status: 500 });
+    return NextResponse.json(errorResponse("No se pudo eliminar el vehículo."), { status: 500 });
   }
 }

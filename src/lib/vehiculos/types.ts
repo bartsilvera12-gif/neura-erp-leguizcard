@@ -37,6 +37,10 @@ export interface Vehiculo {
   color: string | null;
   km_actual: number | null;
   km_actualizado_at: string | null;
+  /** Especificacion del aceite que pide el vehiculo (ej. "15W40 semisintetico"). */
+  aceite_tipo: string | null;
+  /** Cuantos litros lleva un cambio completo. */
+  aceite_litros: number | null;
   observaciones: string | null;
   activo: boolean;
   created_at: string;
@@ -54,6 +58,8 @@ export interface NuevoVehiculoInput {
   vin?: string | null;
   color?: string | null;
   km_actual?: number | null;
+  aceite_tipo?: string | null;
+  aceite_litros?: number | null;
   observaciones?: string | null;
   activo?: boolean;
 }

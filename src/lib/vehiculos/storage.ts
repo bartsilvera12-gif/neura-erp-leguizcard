@@ -36,6 +36,8 @@ export async function getVehiculo(id: string): Promise<{
   vehiculo: Vehiculo;
   servicios: ServicioVehiculo[];
   proximos: EstadoServicioVehiculo[];
+  /** Total de ventas atadas al vehiculo, con o sin kilometraje cargado. */
+  ventasAsociadas: number;
 } | null> {
   try {
     const res = await fetchWithSupabaseSession(`/api/vehiculos/${encodeURIComponent(id)}`, {
@@ -45,12 +47,14 @@ export async function getVehiculo(id: string): Promise<{
       vehiculo?: Vehiculo;
       servicios?: ServicioVehiculo[];
       proximos?: EstadoServicioVehiculo[];
+      ventasAsociadas?: number;
     }>(res, "getVehiculo");
     if (!json.data?.vehiculo) return null;
     return {
       vehiculo: json.data.vehiculo,
       servicios: json.data.servicios ?? [],
       proximos: json.data.proximos ?? [],
+      ventasAsociadas: Number(json.data.ventasAsociadas ?? 0),
     };
   } catch (e) {
     console.error("[vehiculos] getVehiculo:", e);
@@ -92,6 +96,28 @@ export async function actualizarVehiculo(
       return { ok: false, error: json.error ?? "No se pudo actualizar el vehículo." };
     }
     return { ok: true, vehiculo: json.data.vehiculo };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Error de red." };
+  }
+}
+
+/**
+ * Borra el vehiculo definitivamente. La API lo rechaza con 409 si tiene ventas
+ * asociadas: ahi la unica opcion valida es darlo de baja.
+ */
+export async function eliminarVehiculo(
+  id: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const res = await fetchWithSupabaseSession(
+      `/api/vehiculos/${encodeURIComponent(id)}?definitivo=1`,
+      { method: "DELETE" }
+    );
+    const json = (await res.json().catch(() => ({}))) as Resp<unknown>;
+    if (!res.ok || !json.success) {
+      return { ok: false, error: json.error ?? "No se pudo eliminar el vehículo." };
+    }
+    return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Error de red." };
   }

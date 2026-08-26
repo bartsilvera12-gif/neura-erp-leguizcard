@@ -1380,6 +1380,15 @@ export default function NuevaVentaPage() {
                     )}
                   </p>
 
+                  {/* Que aceite lleva, a la vista al cargar la venta: evita
+                      preguntarle al mecanico o abrir la ficha en otra pestana. */}
+                  {(vehiculoSel.aceite_tipo || vehiculoSel.aceite_litros != null) && (
+                    <p className="mt-1 inline-flex items-center gap-1 rounded-md bg-[#4FAEB2]/10 px-2 py-0.5 text-[11px] font-semibold text-[#3F8E91]">
+                      Usa {vehiculoSel.aceite_tipo ?? "aceite sin especificar"}
+                      {vehiculoSel.aceite_litros != null && ` · ${vehiculoSel.aceite_litros} L`}
+                    </p>
+                  )}
+
                   {vehiculoDeOtroCliente && (
                     <p className="mt-1.5 flex items-start gap-1 text-[11px] text-amber-700">
                       <AlertTriangle className="mt-px h-3 w-3 shrink-0" />

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Car, CalendarClock, Gauge, Loader2, Wrench } from "lucide-react";
+import { AlertTriangle, Car, CalendarClock, Droplet, Gauge, Loader2, Pencil, Wrench } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
 import { actualizarVehiculo, getVehiculo } from "@/lib/vehiculos/storage";
 import {
@@ -169,6 +169,15 @@ export default function VehiculoDetallePage({ params }: { params: Promise<{ id: 
         description={desc ? `${desc}${vehiculo.anio ? ` · ${vehiculo.anio}` : ""}` : "Sin marca ni modelo cargados"}
         backHref="/vehiculos"
         backLabel="Volver a vehículos"
+        actions={
+          <Link
+            href={`/vehiculos/${vehiculo.id}/editar`}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-[#4FAEB2] hover:text-[#3F8E91]"
+          >
+            <Pencil className="h-4 w-4" />
+            Editar
+          </Link>
+        }
       />
 
       {/* ── Proximo servicio ──────────────────────────────────────────────
@@ -263,6 +272,33 @@ export default function VehiculoDetallePage({ params }: { params: Promise<{ id: 
               value={vehiculo.activo ? "Activo" : <span className="text-slate-500">De baja</span>}
             />
           </dl>
+          {/* Que aceite lleva. Se destaca porque es el dato operativo de un
+              lubricentro: sin el, el mecanico pregunta o adivina. */}
+          <div className="mt-4 flex items-start gap-2 rounded-lg border border-[#4FAEB2]/30 bg-[#4FAEB2]/5 px-3 py-2">
+            <Droplet className="mt-0.5 h-4 w-4 shrink-0 text-[#4FAEB2]" />
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-slate-400">Aceite que usa</p>
+              {vehiculo.aceite_tipo || vehiculo.aceite_litros != null ? (
+                <p className="mt-0.5 text-sm font-semibold text-slate-800">
+                  {vehiculo.aceite_tipo ?? "Sin especificar"}
+                  {vehiculo.aceite_litros != null && (
+                    <span className="font-normal text-slate-500">
+                      {" "}· {vehiculo.aceite_litros} L por cambio
+                    </span>
+                  )}
+                </p>
+              ) : (
+                <p className="mt-0.5 text-sm text-slate-400">
+                  Sin cargar.{" "}
+                  <Link href={`/vehiculos/${vehiculo.id}/editar`} className="text-[#3F8E91] hover:underline">
+                    Cargalo acá
+                  </Link>
+                  .
+                </p>
+              )}
+            </div>
+          </div>
+
           {vehiculo.observaciones && (
             <div className="mt-4 rounded-lg bg-slate-50 px-3 py-2">
               <p className="text-[11px] uppercase tracking-wide text-slate-400">Observaciones</p>

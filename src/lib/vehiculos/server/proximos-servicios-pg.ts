@@ -88,6 +88,7 @@ function cteServiciosYUltimo(
   tP: string,
   tVen: string,
   tIt: string,
+  tVV: string,
   filtroVehiculo: string
 ): string {
   return `
@@ -109,17 +110,20 @@ function cteServiciosYUltimo(
       -- venta posterior SIN km pisaba a la anterior CON km (el DISTINCT ON se
       -- queda con la mas reciente), ultimo_km salia NULL y el aviso por
       -- kilometraje se apagaba sin que nadie se enterara.
-      SELECT DISTINCT ON (v.vehiculo_id, i.producto_id)
-             v.vehiculo_id, i.producto_id, v.fecha AS ultima_fecha, v.km_registrado AS ultimo_km
-        FROM ${tVen} v
+      SELECT DISTINCT ON (vv.vehiculo_id, i.producto_id)
+             vv.vehiculo_id, i.producto_id, v.fecha AS ultima_fecha, vv.km_registrado AS ultimo_km
+        FROM ${tVV} vv
+        JOIN ${tVen} v ON v.id = vv.venta_id AND v.empresa_id = vv.empresa_id
+        -- La linea tiene que ser de ESE auto: en una venta con flota, el aceite
+        -- de una camioneta no marca el mantenimiento de la otra.
         JOIN ${tIt} i ON i.venta_id = v.id AND i.empresa_id = v.empresa_id
-       WHERE v.empresa_id = $1::uuid
-         AND v.vehiculo_id IS NOT NULL
-         AND v.km_registrado IS NOT NULL
+                     AND i.vehiculo_id = vv.vehiculo_id
+       WHERE vv.empresa_id = $1::uuid
+         AND vv.km_registrado IS NOT NULL
          AND v.estado <> 'anulada'
          AND i.producto_id IN (SELECT id FROM servicios)
          ${filtroVehiculo}
-       ORDER BY v.vehiculo_id, i.producto_id, v.fecha DESC
+       ORDER BY vv.vehiculo_id, i.producto_id, v.fecha DESC
     )`;
 }
 
@@ -138,13 +142,14 @@ export async function listProximosServicios(
   const tVen = quoteSchemaTable(schema, "ventas");
   const tIt = quoteSchemaTable(schema, "ventas_items");
   const tP = quoteSchemaTable(schema, "productos");
+  const tVV = quoteSchemaTable(schema, "ventas_vehiculos");
   const tC = quoteSchemaTable(schema, "clientes");
 
   const dias = opts.diasAnticipacion ?? 30;
 
   const { rows } = await pool().query<ProximoServicioRow>(
     `
-    ${cteServiciosYUltimo(tP, tVen, tIt, "")}
+    ${cteServiciosYUltimo(tP, tVen, tIt, tVV, "")}
     SELECT
       veh.id::text                AS vehiculo_id,
       veh.patente,
@@ -234,10 +239,11 @@ export async function listEstadoServiciosDeVehiculo(
   const tVen = quoteSchemaTable(schema, "ventas");
   const tIt = quoteSchemaTable(schema, "ventas_items");
   const tP = quoteSchemaTable(schema, "productos");
+  const tVV = quoteSchemaTable(schema, "ventas_vehiculos");
 
   const { rows } = await pool().query<EstadoServicioVehiculoRow>(
     `
-    ${cteServiciosYUltimo(tP, tVen, tIt, "AND v.vehiculo_id = $2::uuid")}
+    ${cteServiciosYUltimo(tP, tVen, tIt, tVV, "AND vv.vehiculo_id = $2::uuid")}
     SELECT
       s.id::text                 AS producto_id,
       s.nombre                   AS servicio_nombre,

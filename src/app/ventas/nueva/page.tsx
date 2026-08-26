@@ -1026,8 +1026,11 @@ export default function NuevaVentaPage() {
             },
         {
           permitirSinStock, pedidoId, pedidoCajaId, cajaId: cajaActivaFinal,
-          vehiculoId: vehiculoId || null,
-          kmRegistrado: vehiculoId && kmRegistrado ? Number(kmRegistrado) : null,
+          // La venta ya soporta varios vehiculos; esta pantalla todavia carga
+          // uno solo, asi que manda un arreglo de uno.
+          vehiculos: vehiculoId
+            ? [{ vehiculo_id: vehiculoId, km_registrado: kmRegistrado ? Number(kmRegistrado) : null }]
+            : [],
           usarSaldoFavor: saldoAplicado,
           retirarSaldoEfectivo: retirarExcedente ? saldoRestante : 0,
           pagos: metodoPago === "mixto"

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
-import type { Venta, LineaVenta, TipoIvaVenta } from "@/lib/ventas/types";
+import type { Venta, LineaVenta, TipoIvaVenta, VentaVehiculo } from "@/lib/ventas/types";
 
 interface VentaRow {
   id: string;
@@ -17,8 +17,6 @@ interface VentaRow {
   plazo_dias: number | null;
   fecha: string;
   cliente_id: string | null;
-  vehiculo_id: string | null;
-  km_registrado: number | string | null;
   observaciones: string | null;
 }
 
@@ -65,7 +63,7 @@ export async function GET(request: NextRequest) {
     const ventasQ = await ctx.supabase
       .from("ventas")
       .select(
-        "id, empresa_id, numero_control, moneda, tipo_cambio, subtotal, monto_iva, total, tipo_venta, plazo_dias, metodo_pago, fecha, cliente_id, vehiculo_id, km_registrado, observaciones"
+        "id, empresa_id, numero_control, moneda, tipo_cambio, subtotal, monto_iva, total, tipo_venta, plazo_dias, metodo_pago, fecha, cliente_id, observaciones"
       )
       .eq("empresa_id", empresaId)
       .order("fecha", { ascending: false })
@@ -87,7 +85,16 @@ export async function GET(request: NextRequest) {
     // igual que los items. Se piden solo los que aparecen en estas ventas, no
     // el padron completo.
     const idsCli = [...new Set(ventasRows.map((r) => r.cliente_id).filter(Boolean))] as string[];
-    const idsVeh = [...new Set(ventasRows.map((r) => r.vehiculo_id).filter(Boolean))] as string[];
+
+    // Los vehiculos de cada venta viven en ventas_vehiculos: una venta puede
+    // cubrir varios, cada uno con su propio odometro.
+    const vvQ = await ctx.supabase
+      .from("ventas_vehiculos")
+      .select("venta_id, vehiculo_id, km_registrado, orden")
+      .eq("empresa_id", empresaId);
+    if (vvQ.error) throw new Error(vvQ.error.message);
+    const vvRows = (vvQ.data ?? []) as unknown as Record<string, unknown>[];
+    const idsVeh = [...new Set(vvRows.map((r) => String(r.vehiculo_id)))];
 
     const [cliQ, vehQ] = await Promise.all([
       idsCli.length
@@ -124,6 +131,20 @@ export async function GET(request: NextRequest) {
       vehPorId.set(String(v.id), { patente: String(v.patente ?? ""), desc: desc || null });
     }
 
+    const vehsPorVenta = new Map<string, VentaVehiculo[]>();
+    for (const r of [...vvRows].sort((x, y) => Number(x.orden ?? 0) - Number(y.orden ?? 0))) {
+      const vid = String(r.vehiculo_id);
+      const meta = vehPorId.get(vid);
+      const lista = vehsPorVenta.get(String(r.venta_id)) ?? [];
+      lista.push({
+        vehiculo_id: vid,
+        patente: meta?.patente ?? "",
+        descripcion: meta?.desc ?? null,
+        km_registrado: r.km_registrado != null ? num(r.km_registrado as string | number) : null,
+      });
+      vehsPorVenta.set(String(r.venta_id), lista);
+    }
+
     const byVenta = new Map<string, VentaItemRow[]>();
     for (const row of itemsRows) {
       const list = byVenta.get(row.venta_id) ?? [];
@@ -154,10 +175,7 @@ export async function GET(request: NextRequest) {
         fecha: r.fecha,
         cliente_id: r.cliente_id ?? null,
         cliente_nombre: r.cliente_id ? nombreCli.get(r.cliente_id) ?? null : null,
-        vehiculo_id: r.vehiculo_id ?? null,
-        vehiculo_patente: r.vehiculo_id ? vehPorId.get(r.vehiculo_id)?.patente ?? null : null,
-        vehiculo_desc: r.vehiculo_id ? vehPorId.get(r.vehiculo_id)?.desc ?? null : null,
-        km_registrado: r.km_registrado != null ? num(r.km_registrado) : null,
+        vehiculos: vehsPorVenta.get(r.id) ?? [],
         observaciones: r.observaciones ?? null,
       };
     });

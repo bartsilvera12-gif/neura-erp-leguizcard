@@ -1,7 +1,15 @@
 import { createServiceRoleClientWithDbSchema } from "@/lib/supabase/empresa-data-schema";
 
+/** Un vehiculo atendido en la venta, con su propia lectura de odometro. */
+export interface CreateVentaVehiculoInput {
+  vehiculo_id: string;
+  km_registrado: number | null;
+}
+
 export interface CreateVentaItemInput {
   producto_id: string;
+  /** A que vehiculo de la venta pertenece la linea. NULL = a ninguno. */
+  vehiculo_id?: string | null;
   producto_nombre: string;
   sku: string;
   cantidad: number;
@@ -40,9 +48,12 @@ export interface CreateVentaPgParams {
   /** Auditoría: quién registra la venta. Se propaga a los movimientos de stock. */
   createdBy?: string | null;
   usuarioNombre?: string | null;
-  /** Lubricentro: vehículo atendido y lectura de odómetro del momento. */
-  vehiculoId?: string | null;
-  kmRegistrado?: number | null;
+  /**
+   * Lubricentro: vehiculos atendidos en esta venta, cada uno con su odometro.
+   * Una venta puede cubrir varios autos (un cliente con flota) y cada linea se
+   * atribuye al suyo.
+   */
+  vehiculos?: CreateVentaVehiculoInput[];
 }
 
 function recalcTotals(items: CreateVentaItemInput[]) {
@@ -185,8 +196,8 @@ export async function createVentaTransaccionalPg(
       metodo_pago: params.metodoPago,
       fecha: fechaIso,
       observaciones: params.observaciones,
-      vehiculo_id: params.vehiculoId ?? null,
-      km_registrado: params.kmRegistrado ?? null,
+      // El vehiculo y el odometro viven en ventas_vehiculos: una venta puede
+      // tener varios, y el kilometraje es propio de cada auto.
     })
     .select("id")
     .single();
@@ -199,6 +210,9 @@ export async function createVentaTransaccionalPg(
       await sb.from("movimientos_inventario").delete().eq("venta_id", ventaId).eq("empresa_id", params.empresaId);
     } catch {}
     try {
+      await sb.from("ventas_vehiculos").delete().eq("venta_id", ventaId).eq("empresa_id", params.empresaId);
+    } catch {}
+    try {
       await sb.from("ventas_items").delete().eq("venta_id", ventaId).eq("empresa_id", params.empresaId);
     } catch {}
     try {
@@ -208,12 +222,18 @@ export async function createVentaTransaccionalPg(
 
   try {
     // 6) Insertar items (bulk)
+    // Si la venta tiene UN solo vehiculo, toda linea sin asignar es de ese auto:
+    // no hay a que otro pertenecer. Normalizarlo aca deja que las consultas del
+    // historial comparen por igualdad, sin casos especiales para NULL.
+    const vehUnico = (params.vehiculos ?? []).length === 1 ? params.vehiculos![0].vehiculo_id : null;
+
     const itemsRows = items.map((line) => ({
       empresa_id: params.empresaId,
       venta_id: ventaId,
       producto_id: line.producto_id,
       producto_nombre: line.producto_nombre,
       sku: line.sku,
+      vehiculo_id: line.vehiculo_id ?? vehUnico,
       cantidad: line.cantidad,
       precio_venta_original: line.precio_venta_original,
       precio_venta: line.precio_venta,
@@ -224,6 +244,21 @@ export async function createVentaTransaccionalPg(
     }));
     const insItems = await sb.from("ventas_items").insert(itemsRows);
     if (insItems.error) throw new Error(insItems.error.message);
+
+    // 6b) Vehiculos atendidos, con el odometro de cada uno.
+    const vehiculos = params.vehiculos ?? [];
+    if (vehiculos.length) {
+      const insVeh = await sb.from("ventas_vehiculos").insert(
+        vehiculos.map((v, i) => ({
+          empresa_id: params.empresaId,
+          venta_id: ventaId,
+          vehiculo_id: v.vehiculo_id,
+          km_registrado: v.km_registrado,
+          orden: i,
+        }))
+      );
+      if (insVeh.error) throw new Error(insVeh.error.message);
+    }
 
     // 7) Descuento de stock + movimientos solo para productos con controla_stock=true.
     for (const line of items) {

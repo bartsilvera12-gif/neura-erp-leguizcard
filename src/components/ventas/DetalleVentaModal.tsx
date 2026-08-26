@@ -50,6 +50,31 @@ export default function DetalleVentaModal({
   }, [onClose]);
 
   const unidades = venta.items.reduce((s, i) => s + i.cantidad, 0);
+  const autos = venta.vehiculos ?? [];
+
+  /**
+   * Con varios autos el listado plano no sirve: hay que ver que se le puso a
+   * cada uno. Con uno solo se muestra plano, sin un encabezado que no aporta.
+   */
+  const grupos: { titulo: string | null; subtitulo: string | null; lineas: typeof venta.items }[] =
+    autos.length > 1
+      ? [
+          ...autos.map((a) => ({
+            titulo: a.patente,
+            subtitulo: [a.descripcion, a.km_registrado != null ? `${miles(a.km_registrado)} km` : null]
+              .filter(Boolean)
+              .join(" · ") || null,
+            lineas: venta.items.filter((i) => i.vehiculo_id === a.vehiculo_id),
+          })),
+          // Lo que no quedo asignado a ningun auto no se puede esconder: es
+          // parte de la venta y tiene que sumar a la vista.
+          {
+            titulo: "Sin vehículo asignado",
+            subtitulo: null,
+            lineas: venta.items.filter((i) => !i.vehiculo_id),
+          },
+        ].filter((g) => g.lineas.length > 0)
+      : [{ titulo: null, subtitulo: null, lineas: venta.items }];
 
   // El IVA se desglosa por tasa: en una misma venta puede haber 10%, 5% y
   // exentas, y un unico total de IVA no deja ver cual es cual.
@@ -123,7 +148,7 @@ export default function DetalleVentaModal({
         </div>
 
         {/* ── Cliente y vehículo ───────────────────────────────────────── */}
-        {(venta.cliente_nombre || venta.vehiculo_patente) && (
+        {(venta.cliente_nombre || autos.length > 0) && (
           <div className="grid gap-px border-b border-slate-100 bg-slate-100 sm:grid-cols-2">
             <div className="flex items-start gap-2.5 bg-white px-5 py-3 sm:px-6">
               <User className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
@@ -137,20 +162,24 @@ export default function DetalleVentaModal({
             <div className="flex items-start gap-2.5 bg-white px-5 py-3 sm:px-6">
               <Car className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
               <div className="min-w-0">
-                <p className="text-[11px] uppercase tracking-wide text-slate-400">Vehículo</p>
-                {venta.vehiculo_patente ? (
-                  <>
-                    <Link
-                      href={`/vehiculos/${venta.vehiculo_id}`}
-                      className="font-mono text-sm font-semibold uppercase text-[#3F8E91] hover:underline"
-                    >
-                      {venta.vehiculo_patente}
-                    </Link>
-                    <p className="truncate text-xs text-slate-500">
-                      {venta.vehiculo_desc ?? "Sin marca ni modelo"}
-                      {venta.km_registrado != null && ` · ${miles(venta.km_registrado)} km`}
-                    </p>
-                  </>
+                <p className="text-[11px] uppercase tracking-wide text-slate-400">
+                  {autos.length > 1 ? `Vehículos (${autos.length})` : "Vehículo"}
+                </p>
+                {autos.length ? (
+                  autos.map((a) => (
+                    <div key={a.vehiculo_id} className="mt-0.5 first:mt-0">
+                      <Link
+                        href={`/vehiculos/${a.vehiculo_id}`}
+                        className="font-mono text-sm font-semibold uppercase text-[#3F8E91] hover:underline"
+                      >
+                        {a.patente}
+                      </Link>
+                      <span className="ml-2 text-xs text-slate-500">
+                        {a.descripcion ?? "Sin marca ni modelo"}
+                        {a.km_registrado != null && ` · ${miles(a.km_registrado)} km`}
+                      </span>
+                    </div>
+                  ))
                 ) : (
                   <p className="text-sm text-slate-400">Sin vehículo</p>
                 )}
@@ -170,8 +199,21 @@ export default function DetalleVentaModal({
                 <th className="px-5 py-2.5 text-right font-medium sm:px-6">Total</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
-              {venta.items.map((i, k) => (
+            {grupos.map((g, gi) => (
+            <tbody key={gi} className="divide-y divide-slate-100">
+              {g.titulo && (
+                <tr>
+                  <td colSpan={4} className="bg-[#4FAEB2]/[0.07] px-5 py-2 sm:px-6">
+                    <span className="font-mono text-xs font-bold uppercase tracking-wide text-[#3F8E91]">
+                      {g.titulo}
+                    </span>
+                    {g.subtitulo && (
+                      <span className="ml-2 text-[11px] text-slate-500">{g.subtitulo}</span>
+                    )}
+                  </td>
+                </tr>
+              )}
+              {g.lineas.map((i, k) => (
                 <tr key={k} className="align-top">
                   <td className="px-5 py-3 sm:px-6">
                     <p className="font-medium leading-snug text-slate-800">{i.producto_nombre}</p>
@@ -190,6 +232,7 @@ export default function DetalleVentaModal({
                 </tr>
               ))}
             </tbody>
+            ))}
           </table>
 
           {venta.observaciones && (

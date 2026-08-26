@@ -6,10 +6,23 @@ export type MetodoPago  = "efectivo" | "tarjeta" | "transferencia" | "mixto";
  *  'costo' se conserva SOLO como histórico (ventas viejas); ya no se ofrece en la UI. */
 export type TipoPrecioVenta = "minorista" | "mayorista" | "distribuidor" | "costo";
 
+/** Un vehículo atendido en una venta, con su lectura de odómetro. */
+export interface VentaVehiculo {
+  vehiculo_id: string;
+  patente: string;
+  descripcion: string | null;
+  km_registrado: number | null;
+}
+
 /** Un ítem dentro de una venta (una línea de producto). */
 export interface LineaVenta {
   /** Toda línea sale del catálogo: los servicios son productos con receta. */
   producto_id:           string;
+  /**
+   * Vehículo al que corresponde la línea, dentro de una venta que puede cubrir
+   * varios. NULL = no es de ningún auto en particular.
+   */
+  vehiculo_id?:          string | null;
   producto_nombre:       string;
   sku:                   string;
   /** Cantidad en la PRESENTACION elegida (ej. 2 = 2 cajas o 10 unidades). */
@@ -74,11 +87,11 @@ export interface Venta {
   /** Nombre del cliente, resuelto por el listado. Solo lectura. */
   cliente_nombre?: string | null;
 
-  /** Vehiculo atendido y odometro del momento (lubricentro). Solo lectura. */
-  vehiculo_id?: string | null;
-  vehiculo_patente?: string | null;
-  vehiculo_desc?: string | null;
-  km_registrado?: number | null;
+  /**
+   * Vehiculos atendidos en la venta, con el odometro de cada uno. Solo lectura.
+   * Una venta puede cubrir varios autos.
+   */
+  vehiculos?: VentaVehiculo[];
 
   /** Lo que anoto el taller en la venta. */
   observaciones?: string | null;

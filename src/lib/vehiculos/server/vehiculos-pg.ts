@@ -283,13 +283,21 @@ export async function listServiciosDeVehiculo(
   const tV = quoteSchemaTable(schema, "ventas");
   const tI = quoteSchemaTable(schema, "ventas_items");
   const tP = quoteSchemaTable(schema, "productos");
+  const tVV = quoteSchemaTable(schema, "ventas_vehiculos");
   const { rows } = await pool().query<ServicioVehiculoRow>(
     `SELECT v.id::text AS venta_id, v.numero_control, v.fecha, v.estado,
-            v.total, v.km_registrado, v.observaciones,
+            -- El total de la venta puede cubrir varios autos; lo que le toco a
+            -- ESTE es la suma de sus propias lineas.
+            COALESCE((
+              SELECT SUM(i.total_linea) FROM ${tI} i
+               WHERE i.venta_id = v.id AND i.empresa_id = v.empresa_id
+                 AND i.vehiculo_id = $2::uuid
+            ), 0) AS total,
+            vv.km_registrado, v.observaciones,
             -- Diferencia contra la lectura de la visita anterior. Las anuladas
             -- se excluyen del calculo particionando por ese mismo criterio.
             CASE WHEN v.estado <> 'anulada'
-                 THEN v.km_registrado - LAG(v.km_registrado) OVER (
+                 THEN vv.km_registrado - LAG(vv.km_registrado) OVER (
                         PARTITION BY (v.estado = 'anulada') ORDER BY v.fecha
                       )
             END AS km_recorridos,
@@ -315,10 +323,14 @@ export async function listServiciosDeVehiculo(
                 FROM ${tI} i
                 LEFT JOIN ${tP} p ON p.id = i.producto_id AND p.empresa_id = i.empresa_id
                WHERE i.venta_id = v.id AND i.empresa_id = v.empresa_id
+                 -- Solo lo que se le puso a ESTE auto: una venta con flota
+                 -- tiene lineas de varios.
+                 AND i.vehiculo_id = $2::uuid
             ), '[]'::json) AS items
-       FROM ${tV} v
-      WHERE v.empresa_id = $1::uuid AND v.vehiculo_id = $2::uuid
-        AND v.km_registrado IS NOT NULL
+       FROM ${tVV} vv
+       JOIN ${tV} v ON v.id = vv.venta_id AND v.empresa_id = vv.empresa_id
+      WHERE vv.empresa_id = $1::uuid AND vv.vehiculo_id = $2::uuid
+        AND vv.km_registrado IS NOT NULL
       ORDER BY v.fecha DESC, v.numero_control DESC
       LIMIT 500`,
     [empresaId, vehiculoId]
@@ -357,7 +369,7 @@ export async function contarVentasDeVehiculo(
   id: string
 ): Promise<number> {
   const schema = assertAllowedChatDataSchema(schemaRaw);
-  const t = quoteSchemaTable(schema, "ventas");
+  const t = quoteSchemaTable(schema, "ventas_vehiculos");
   const { rows } = await pool().query<{ n: string }>(
     `SELECT COUNT(*)::text AS n FROM ${t}
       WHERE empresa_id = $1::uuid AND vehiculo_id = $2::uuid`,

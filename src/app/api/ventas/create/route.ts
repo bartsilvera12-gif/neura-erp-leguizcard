@@ -18,8 +18,11 @@ function asItems(body: unknown): CreateVentaItemInput[] | null {
     const r = x as Record<string, unknown>;
     const tipoIva = r.tipo_iva;
     if (tipoIva !== "EXENTA" && tipoIva !== "5%" && tipoIva !== "10%") return null;
+    const vehLinea = r.vehiculo_id;
     out.push({
       producto_id: String(r.producto_id ?? ""),
+      vehiculo_id:
+        vehLinea === null || vehLinea === undefined || vehLinea === "" ? null : String(vehLinea),
       producto_nombre: String(r.producto_nombre ?? ""),
       sku: String(r.sku ?? ""),
       cantidad: Number(r.cantidad),
@@ -123,18 +126,47 @@ export async function POST(request: NextRequest) {
         ? null
         : String(o.observaciones).slice(0, 4000);
 
-    // Lubricentro: vehículo atendido y lectura de odómetro. Ambos opcionales —
-    // una venta de mostrador no los manda.
-    const vehiculoRaw = o.vehiculo_id;
-    const vehiculoId =
-      vehiculoRaw === null || vehiculoRaw === undefined || vehiculoRaw === ""
-        ? null
-        : String(vehiculoRaw);
-    const kmRaw = o.km_registrado;
-    const kmRegistrado =
-      kmRaw === null || kmRaw === undefined || kmRaw === "" ? null : Number(kmRaw);
-    if (kmRegistrado != null && (!Number.isFinite(kmRegistrado) || kmRegistrado < 0)) {
-      return NextResponse.json(errorResponse("Kilometraje inválido."), { status: 400 });
+    // Lubricentro: los vehículos atendidos, cada uno con su odómetro. Una venta
+    // puede cubrir varios (un cliente con flota) o ninguno (venta de mostrador).
+    const vehiculos: { vehiculo_id: string; km_registrado: number | null }[] = [];
+    const vehRaw = o.vehiculos;
+    if (vehRaw !== undefined && vehRaw !== null) {
+      if (!Array.isArray(vehRaw)) {
+        return NextResponse.json(errorResponse("Vehículos inválidos."), { status: 400 });
+      }
+      for (const x of vehRaw) {
+        if (!x || typeof x !== "object") {
+          return NextResponse.json(errorResponse("Vehículos inválidos."), { status: 400 });
+        }
+        const rv = x as Record<string, unknown>;
+        const vid = String(rv.vehiculo_id ?? "");
+        if (!vid) {
+          return NextResponse.json(errorResponse("Falta el vehículo."), { status: 400 });
+        }
+        const kmRaw = rv.km_registrado;
+        const km = kmRaw === null || kmRaw === undefined || kmRaw === "" ? null : Number(kmRaw);
+        if (km != null && (!Number.isFinite(km) || km < 0)) {
+          return NextResponse.json(errorResponse("Kilometraje inválido."), { status: 400 });
+        }
+        // El mismo auto dos veces en una venta seria ambiguo: con que km entro.
+        if (vehiculos.some((v) => v.vehiculo_id === vid)) {
+          return NextResponse.json(
+            errorResponse("Un vehículo no puede repetirse en la misma venta."),
+            { status: 400 }
+          );
+        }
+        vehiculos.push({ vehiculo_id: vid, km_registrado: km });
+      }
+    }
+
+    // Una linea no puede apuntar a un auto que no esta en la venta: quedaria
+    // colgada del vehiculo equivocado en su historial.
+    const idsVeh = new Set(vehiculos.map((v) => v.vehiculo_id));
+    if (items.some((i) => i.vehiculo_id && !idsVeh.has(i.vehiculo_id))) {
+      return NextResponse.json(
+        errorResponse("Hay ítems asignados a un vehículo que no está en la venta."),
+        { status: 400 }
+      );
     }
 
     // Pedido de cocina (modalidad obligatoria; comportamiento heredado del baseline)
@@ -211,16 +243,18 @@ export async function POST(request: NextRequest) {
       // Auditoría de stock: todo movimiento queda con el usuario que lo generó.
       createdBy: auth.usuarioCatalogId ?? auth.user?.id ?? null,
       usuarioNombre: authRol?.nombre?.trim() || auth.user?.email || null,
-      vehiculoId,
-      kmRegistrado,
+      vehiculos,
     });
 
-    // El odómetro del vehículo avanza con la venta. Best-effort: si falla, la
-    // venta ya está registrada y no se la tira por esto.
-    if (vehiculoId && kmRegistrado != null) {
+    // El odómetro de cada vehículo avanza con la venta. Best-effort: si falla,
+    // la venta ya está registrada y no se la tira por esto.
+    const conKm = vehiculos.filter((v) => v.km_registrado != null);
+    if (conKm.length) {
       try {
         const { actualizarKmSiAvanza } = await import("@/lib/vehiculos/server/vehiculos-pg");
-        await actualizarKmSiAvanza(schema, auth.empresa_id, vehiculoId, kmRegistrado);
+        for (const v of conKm) {
+          await actualizarKmSiAvanza(schema, auth.empresa_id, v.vehiculo_id, v.km_registrado!);
+        }
       } catch (e) {
         console.warn("[/api/ventas/create] km vehículo:", e instanceof Error ? e.message : e);
       }

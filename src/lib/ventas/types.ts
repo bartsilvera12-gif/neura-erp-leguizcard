@@ -79,6 +79,10 @@ export interface LineaInsumoServicio {
   cantidad_receta?:   number;
   /** Stock del insumo al momento de armar la venta. Solo cliente. */
   stock_actual?:      number;
+  /** FRACCION (0.02 = 2%). Solo cliente: para recalcular el costo al vuelo. */
+  merma_pct?:         number;
+  /** Costo del insumo en SU unidad. Solo cliente, mismo fin. */
+  costo_promedio?:    number;
 }
 
 /** Cabecera de venta: condiciones comerciales + totales consolidados. */

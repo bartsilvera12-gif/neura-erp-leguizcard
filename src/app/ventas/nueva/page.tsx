@@ -46,6 +46,11 @@ function formatGs(valor: number) {
   return `Gs. ${Math.round(valor).toLocaleString("es-PY")}`;
 }
 
+/** Cantidad con hasta dos decimales, sin arrastrar ceros: 0,98 · 3,7 · 9 */
+function nroDec(valor: number) {
+  return valor.toLocaleString("es-PY", { maximumFractionDigits: 2 });
+}
+
 /**
  * IVA INCLUIDO: el precio de venta ya contiene el IVA. `total` es precio × cantidad
  * (= total de la línea). El IVA se desglosa desde adentro, NO se suma encima.
@@ -1157,7 +1162,42 @@ export default function NuevaVentaPage() {
       unidad_medida: i.unidad_medida,
       cantidad_receta: i.cantidad,
       stock_actual: i.stock_actual,
+      merma_pct: i.merma_pct,
+      costo_promedio: i.costo_promedio,
     }));
+  }
+
+  /**
+   * Cuanto cuesta UN servicio con estos insumos: mano de obra + materiales.
+   *
+   * Convierte igual que el servidor (misma tabla de unidades): la receta habla
+   * en litros y el aceite se compra por galon. Un insumo cuya unidad no se
+   * puede convertir no suma, que es lo mismo que hace el costeo de la base.
+   */
+  function costoDeServicio(sv: Servicio, insumos: LineaInsumoServicio[]): number {
+    let materiales = 0;
+    for (const i of insumos) {
+      const p = productos.find((x) => x.id === i.insumo_producto_id);
+      const cant = cantidadEnUnidadDelProducto(i.cantidad, i.unidad_medida, p?.unidad_medida);
+      if (cant == null) continue;
+      const costo = i.costo_promedio ?? p?.costo_promedio ?? 0;
+      materiales += cant * (1 + (i.merma_pct ?? 0)) * costo;
+    }
+    return sv.mano_obra + materiales;
+  }
+
+  /**
+   * Que precio corresponde cobrar con estos insumos.
+   *
+   * Si el servicio tiene margen configurado, se aplica ese margen al costo
+   * nuevo: es la regla que el propio servicio define. Si el precio es a mano,
+   * se mueve en la MISMA proporcion que el costo, para que poner mas aceite no
+   * se coma la ganancia sin que nadie lo note.
+   */
+  function precioSegunCosto(sv: Servicio, costoNuevo: number): number {
+    if (sv.margen_pct != null) return Math.round(costoNuevo * (1 + sv.margen_pct / 100));
+    if (sv.costo_total <= 0) return sv.precio_venta;
+    return Math.round(sv.precio_venta * (costoNuevo / sv.costo_total));
   }
 
   /** true si la linea tiene algun insumo corrido respecto de la receta. */
@@ -1173,21 +1213,42 @@ export default function NuevaVentaPage() {
         if (i !== idx) return it;
         const base = insumosDeLinea(it);
         if (!base) return it;
-        // Ajustar insumos no cambia el precio: lo que se cobra ya esta en la
-        // linea y se edita aparte. Esto corrige lo que sale del deposito.
-        return {
+        const insumos = base.map((x) =>
+          x.insumo_producto_id === insumoId ? { ...x, cantidad } : x
+        );
+        const sv = servicioPorProducto.get(it.producto_id);
+        if (!sv) return { ...it, insumos };
+        // Mas material, mas cuesta: el precio sigue al costo. Si no lo hiciera,
+        // poner dos litros de mas se comeria la ganancia sin que nadie lo vea.
+        // El precio queda editable: esto propone, no impone.
+        const precio = precioSegunCosto(sv, costoDeServicio(sv, insumos));
+        return recomputeLinea({
           ...it,
-          insumos: base.map((x) =>
-            x.insumo_producto_id === insumoId ? { ...x, cantidad } : x
-          ),
-        };
+          insumos,
+          precio_venta: precio,
+          precio_venta_original: precio,
+          precio_manual: true,
+        });
       })
     );
   }
 
-  /** Vuelve a lo que dice la receta. */
+  /** Vuelve a lo que dice la receta: insumos y precio. */
   function restaurarInsumos(idx: number) {
-    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, insumos: null } : it)));
+    setItems((prev) =>
+      prev.map((it, i) => {
+        if (i !== idx) return it;
+        const sv = servicioPorProducto.get(it.producto_id);
+        if (!sv) return { ...it, insumos: null };
+        return recomputeLinea({
+          ...it,
+          insumos: null,
+          precio_venta: sv.precio_venta,
+          precio_venta_original: sv.precio_venta,
+          precio_manual: true,
+        });
+      })
+    );
   }
 
   function toggleInsumos(clave: string) {
@@ -1199,24 +1260,32 @@ export default function NuevaVentaPage() {
     });
   }
 
-  /** El desglose de un servicio: que lleva y cuanto, corregible. */
+  /** El desglose de un servicio: que lleva, cuanto, y que cuesta. */
   function filaInsumos(item: LineaVenta, idx: number, insumos: LineaInsumoServicio[]) {
+    const sv = servicioPorProducto.get(item.producto_id);
+    const costo = sv ? costoDeServicio(sv, insumos) : null;
+    const costoReceta = sv?.costo_total ?? null;
+    const tocado = insumosTocados(item);
+
     return (
       <tr className="bg-slate-50/70">
-        <td colSpan={8} className="px-3 py-3">
-          <div className="rounded-lg border border-slate-200 bg-white">
-            <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-3 py-2">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                Lo que lleva este servicio
-              </p>
-              {insumosTocados(item) && (
+        <td colSpan={8} className="px-3 pb-3">
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/60 px-4 py-2.5">
+              <div>
+                <p className="text-xs font-bold text-slate-700">Lo que lleva este servicio</p>
+                <p className="text-[11px] text-slate-400">
+                  Corregí lo que realmente se usó y el precio se acomoda solo.
+                </p>
+              </div>
+              {tocado && (
                 <button
                   type="button"
                   onClick={() => restaurarInsumos(idx)}
-                  className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-[#3F8E91]"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 transition-colors hover:border-[#4FAEB2] hover:text-[#3F8E91]"
                 >
                   <RotateCcw className="h-3 w-3" />
-                  Volver a la receta
+                  Deshacer cambios
                 </button>
               )}
             </div>
@@ -1224,60 +1293,90 @@ export default function NuevaVentaPage() {
             <ul className="divide-y divide-slate-100">
               {insumos.map((ins) => {
                 const prodIns = productos.find((p) => p.id === ins.insumo_producto_id);
-                // La receta habla en litros y el aceite se compra por galon: hay
-                // que convertir antes de comparar contra el stock.
-                const enUnidadProd = cantidadEnUnidadDelProducto(
+                // La receta habla en litros y el aceite se compra por galon:
+                // hay que convertir antes de comparar contra el stock.
+                const sale = cantidadEnUnidadDelProducto(
                   ins.cantidad * item.cantidad,
                   ins.unidad_medida,
                   prodIns?.unidad_medida
                 );
                 const stock = ins.stock_actual ?? prodIns?.stock_actual ?? 0;
-                const falta = enUnidadProd != null && enUnidadProd > stock;
+                const falta = sale != null && sale > stock;
+                const sinUsar = ins.cantidad === 0;
                 const cambiado =
                   ins.cantidad_receta != null && ins.cantidad !== ins.cantidad_receta;
+                const paso = permiteDecimales(ins.unidad_medida) ? 0.5 : 1;
+                const nuevo = (n: number) =>
+                  cambiarInsumo(idx, ins.insumo_producto_id, Math.max(0, Math.round(n * 100) / 100));
+
                 return (
                   <li
                     key={ins.insumo_producto_id}
-                    className="flex flex-wrap items-center gap-3 px-3 py-2"
+                    className={`flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ${
+                      sinUsar ? "bg-slate-50/60" : ""
+                    }`}
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-slate-800">{ins.insumo_nombre}</p>
-                      <p className="text-[11px] text-slate-400">
-                        {enUnidadProd != null && prodIns
-                          ? `Sale del stock: ${(Math.round(enUnidadProd * 100) / 100).toLocaleString("es-PY")} ${prodIns.unidad_medida ?? ""} · quedan ${stock}`
-                          : "No se puede convertir la unidad: no descuenta stock"}
-                        {ins.cantidad === 0 && " · no se usa en esta venta"}
+                      <p
+                        className={`truncate text-sm font-medium ${
+                          sinUsar ? "text-slate-400 line-through" : "text-slate-800"
+                        }`}
+                        title={ins.insumo_nombre}
+                      >
+                        {ins.insumo_nombre}
                       </p>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+                        {sinUsar ? (
+                          <span className="text-slate-400">No se usa en esta venta</span>
+                        ) : sale == null ? (
+                          <span className="font-medium text-amber-600">
+                            Unidad no convertible: no descuenta stock
+                          </span>
+                        ) : (
+                          <span className={falta ? "font-semibold text-red-600" : "text-slate-500"}>
+                            Salen {nroDec(sale)} {prodIns?.unidad_medida ?? ""} · quedan {nroDec(stock)}
+                          </span>
+                        )}
+                        {cambiado && (
+                          <span className="rounded-full bg-amber-50 px-2 py-0.5 font-semibold text-amber-700">
+                            el servicio lleva {nroDec(ins.cantidad_receta ?? 0)} {ins.unidad_medida ?? ""}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
-                    {cambiado && (
-                      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                        receta: {ins.cantidad_receta}
-                      </span>
-                    )}
-                    {falta && (
-                      <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">
-                        Sin stock suficiente
-                      </span>
-                    )}
-
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={ins.cantidad}
-                        onChange={(e) =>
-                          cambiarInsumo(
-                            idx,
-                            ins.insumo_producto_id,
-                            Math.max(0, Number(e.target.value) || 0)
-                          )
-                        }
-                        className="h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-right text-sm tabular-nums"
-                        aria-label={`Cantidad de ${ins.insumo_nombre}`}
-                      />
-                      <span className="w-14 text-[11px] font-semibold uppercase text-slate-500">
+                    {/* Mismo control que la cantidad del carrito: se toca con el
+                        dedo, sin apuntarle a una flechita de 6 px. */}
+                    <div className="flex shrink-0 items-center gap-2">
+                      <div className="flex items-center rounded-lg border border-slate-200 bg-white">
+                        <button
+                          type="button"
+                          onClick={() => nuevo(ins.cantidad - paso)}
+                          disabled={ins.cantidad <= 0}
+                          className="h-9 w-9 rounded-l-lg text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent"
+                          aria-label={`Menos ${ins.insumo_nombre}`}
+                        >
+                          <Minus className="mx-auto h-3.5 w-3.5" />
+                        </button>
+                        <input
+                          type="number"
+                          min={0}
+                          step={paso}
+                          value={ins.cantidad}
+                          onChange={(e) => nuevo(Number(e.target.value) || 0)}
+                          className="h-9 w-16 border-x border-slate-200 text-center text-sm font-semibold tabular-nums text-slate-800 outline-none [appearance:textfield] focus:bg-[#4FAEB2]/5 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                          aria-label={`Cantidad de ${ins.insumo_nombre}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => nuevo(ins.cantidad + paso)}
+                          className="h-9 w-9 rounded-r-lg text-slate-500 transition-colors hover:bg-slate-100"
+                          aria-label={`Más ${ins.insumo_nombre}`}
+                        >
+                          <Plus className="mx-auto h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <span className="w-16 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                         {ins.unidad_medida ?? ""}
                       </span>
                     </div>
@@ -1286,9 +1385,31 @@ export default function NuevaVentaPage() {
               })}
             </ul>
 
-            <p className="border-t border-slate-100 px-3 py-2 text-[11px] leading-relaxed text-slate-400">
-              Es por cada servicio de esta línea. Cambiar estas cantidades corrige lo que sale
-              del depósito, no lo que se le cobra al cliente.
+            {/* Lo que cambia en plata, a la vista y antes de cobrar. */}
+            {sv && costo != null && (
+              <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-t border-slate-100 bg-slate-50/60 px-4 py-2.5 text-[11px]">
+                <span className="text-slate-500">
+                  Costo del servicio{" "}
+                  <strong className="tabular-nums text-slate-700">{formatGs(costo)}</strong>
+                  {costoReceta != null && tocado && Math.round(costo) !== Math.round(costoReceta) && (
+                    <span className="text-slate-400"> · normalmente {formatGs(costoReceta)}</span>
+                  )}
+                </span>
+                <span className="text-slate-500">
+                  {sv.margen_pct != null
+                    ? `Precio = costo + ${sv.margen_pct}%`
+                    : tocado
+                      ? "El precio se movió junto con el costo"
+                      : "Precio puesto a mano"}
+                  {": "}
+                  <strong className="tabular-nums text-slate-800">{formatGs(item.precio_venta)}</strong>
+                </span>
+              </div>
+            )}
+
+            <p className="border-t border-slate-100 px-4 py-2 text-[11px] leading-relaxed text-slate-400">
+              Las cantidades son por cada servicio de esta línea, y lo que pongas acá es lo que
+              sale del depósito.
             </p>
           </div>
         </td>

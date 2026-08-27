@@ -75,8 +75,7 @@ export async function GET(request: NextRequest) {
                   WHERE pc2.venta_id = v.id AND pc2.empresa_id = v.empresa_id
                   ORDER BY pc2.created_at ASC LIMIT 1) AS vendedor
          ${baseFrom}
-         ORDER BY v.fecha DESC
-         LIMIT 5000`,
+         ORDER BY v.fecha DESC`,
         args
       );
       const items = rows.map((r: Record<string, unknown>) => ({
@@ -103,8 +102,7 @@ export async function GET(request: NextRequest) {
               COUNT(DISTINCT v.id) AS ventas
        ${baseFrom}
        GROUP BY vi.producto_id
-       ORDER BY SUM(vi.cantidad) DESC
-       LIMIT 5000`,
+       ORDER BY SUM(vi.cantidad) DESC`,
       args
     );
     const items = rows.map((r: Record<string, unknown>) => ({

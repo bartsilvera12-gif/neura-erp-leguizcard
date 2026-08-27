@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
+import { traerTodo } from "@/lib/supabase/traer-todo";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { crearPresupuesto, type PresupuestoItemInput } from "@/lib/presupuestos/server/presupuestos-pg";
@@ -49,16 +50,17 @@ export async function GET(request: NextRequest) {
     const ctx = await getTenantSupabaseFromAuth(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
     const estado = new URL(request.url).searchParams.get("estado");
-    let q = ctx.supabase
-      .from("presupuestos")
-      .select(PRESU_COLS)
-      .eq("empresa_id", ctx.auth.empresa_id)
-      .order("fecha", { ascending: false })
-      .limit(500);
-    if (estado) q = q.eq("estado", estado);
-    const { data, error } = await q;
-    if (error) throw new Error(error.message);
-    return NextResponse.json(successResponse({ presupuestos: data ?? [] }));
+    const presupuestos = await traerTodo((desde, hasta) => {
+      let q = ctx.supabase
+        .from("presupuestos")
+        .select(PRESU_COLS)
+        .eq("empresa_id", ctx.auth.empresa_id)
+        .order("fecha", { ascending: false })
+        .order("id", { ascending: false });
+      if (estado) q = q.eq("estado", estado);
+      return q.range(desde, hasta);
+    });
+    return NextResponse.json(successResponse({ presupuestos }));
   } catch (err) {
     console.error("[/api/presupuestos GET]", err instanceof Error ? err.message : err);
     return NextResponse.json(errorResponse("No se pudieron cargar los presupuestos."), { status: 500 });

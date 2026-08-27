@@ -143,7 +143,7 @@ export async function listCompras(
     `SELECT ${COLS.split(",").map((c) => `c.${c.trim()}`).join(", ")}, p.unidad_medida AS unidad_medida
        FROM ${t} c
        LEFT JOIN ${tProd} p ON p.id = c.producto_id
-      WHERE c.empresa_id = $1::uuid ORDER BY c.fecha DESC LIMIT 500`,
+      WHERE c.empresa_id = $1::uuid ORDER BY c.fecha DESC`,
     [empresaId]
   );
   return rows;

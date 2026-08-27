@@ -1,4 +1,5 @@
 import type { AppSupabaseClient } from "@/lib/supabase/schema";
+import { traerTodo } from "@/lib/supabase/traer-todo";
 
 export type OrigenRecibo = "venta_contado" | "cobro_cxc" | "manual";
 
@@ -282,23 +283,31 @@ export async function listarRecibos(
     incluirAnulados?: boolean;
   }
 ): Promise<Record<string, unknown>[]> {
-  let q = sb
-    .from("recibos_dinero")
-    .select(RECIBO_COLS)
-    .eq("empresa_id", empresaId)
-    .order("fecha", { ascending: false })
-    .limit(500);
-
-  if (filtros.desde) q = q.gte("fecha", filtros.desde);
-  if (filtros.hasta) q = q.lte("fecha", filtros.hasta);
-  if (filtros.origen) q = q.eq("origen", filtros.origen);
-  if (!filtros.incluirAnulados) q = q.eq("anulado", false);
   const b = filtros.buscar?.trim();
-  if (b) q = q.or(`numero_recibo.ilike.%${b}%,cliente_nombre.ilike.%${b}%,concepto.ilike.%${b}%`);
 
-  const { data, error } = await q;
-  if (error) throw new ReciboError(error.message, 500);
-  return (data ?? []) as unknown as Record<string, unknown>[];
+  try {
+    return await traerTodo<Record<string, unknown>>((desde, hasta) => {
+      let q = sb
+        .from("recibos_dinero")
+        .select(RECIBO_COLS)
+        .eq("empresa_id", empresaId)
+        .order("fecha", { ascending: false })
+        .order("id", { ascending: false });
+
+      if (filtros.desde) q = q.gte("fecha", filtros.desde);
+      if (filtros.hasta) q = q.lte("fecha", filtros.hasta);
+      if (filtros.origen) q = q.eq("origen", filtros.origen);
+      if (!filtros.incluirAnulados) q = q.eq("anulado", false);
+      if (b) q = q.or(`numero_recibo.ilike.%${b}%,cliente_nombre.ilike.%${b}%,concepto.ilike.%${b}%`);
+
+      return q.range(desde, hasta) as unknown as PromiseLike<{
+        data: Record<string, unknown>[] | null;
+        error: { message: string } | null;
+      }>;
+    });
+  } catch (e) {
+    throw new ReciboError(e instanceof Error ? e.message : "No se pudieron leer los recibos.", 500);
+  }
 }
 
 type InsertData = {

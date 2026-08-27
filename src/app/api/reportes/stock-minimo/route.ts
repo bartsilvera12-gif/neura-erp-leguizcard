@@ -43,8 +43,7 @@ export async function GET(request: NextRequest) {
           AND COALESCE(p.controla_stock, true) = true
           AND COALESCE(p.stock_minimo, 0) > 0
           AND COALESCE(p.stock_actual, 0) < p.stock_minimo
-        ORDER BY (p.stock_minimo - p.stock_actual) DESC, p.nombre ASC
-        LIMIT 5000`,
+        ORDER BY (p.stock_minimo - p.stock_actual) DESC, p.nombre ASC`,
       [empresaId]
     );
 

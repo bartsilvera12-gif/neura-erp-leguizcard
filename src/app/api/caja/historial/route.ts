@@ -5,19 +5,17 @@ import { API_ERRORS } from "@/lib/api/errors";
 import { listarCajas } from "@/lib/caja/server";
 
 /**
- * GET /api/caja/historial?limit=50
+ * GET /api/caja/historial
  *
  * Lista historico de cajas (abiertas y cerradas), mas recientes primero.
+ * Sin tope: vienen todas.
  */
 export async function GET(request: NextRequest) {
   try {
     const ctx = await getTenantSupabaseFromAuth(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
 
-    const url = new URL(request.url);
-    const limit = Math.max(1, Math.min(200, Number(url.searchParams.get("limit") ?? 50) || 50));
-
-    const cajas = await listarCajas(ctx.supabase, ctx.auth.empresa_id, limit);
+    const cajas = await listarCajas(ctx.supabase, ctx.auth.empresa_id);
     return NextResponse.json(successResponse({ cajas }));
   } catch (err) {
     const msg = err instanceof Error ? err.message : "No se pudo cargar el historial.";

@@ -87,8 +87,7 @@ export async function listVehiculos(
   const { rows } = await pool().query<VehiculoRow>(
     `SELECT ${COLS}${colUltimaVisita(schema)} FROM ${from(schema)}
       WHERE ${where.join(" AND ")}
-      ORDER BY v.activo DESC, v.patente ASC
-      LIMIT 5000`,
+      ORDER BY v.activo DESC, v.patente ASC`,
     args
   );
   return rows;
@@ -347,8 +346,7 @@ export async function listServiciosDeVehiculo(
        JOIN ${tV} v ON v.id = vv.venta_id AND v.empresa_id = vv.empresa_id
       WHERE vv.empresa_id = $1::uuid AND vv.vehiculo_id = $2::uuid
         AND vv.km_registrado IS NOT NULL
-      ORDER BY v.fecha DESC, v.numero_control DESC
-      LIMIT 500`,
+      ORDER BY v.fecha DESC, v.numero_control DESC`,
     [empresaId, vehiculoId]
   );
   return rows;

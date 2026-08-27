@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
+import { traerTodo } from "@/lib/supabase/traer-todo";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
-
-const MAX_ROWS = 200;
 
 /**
  * GET /api/clientes/:id/historial
@@ -34,21 +33,20 @@ export async function GET(
       return NextResponse.json(errorResponse("Cliente no encontrado"), { status: 404 });
     }
 
-    const { data: rows, error } = await ctx.supabase
-      .from("cliente_historial")
-      .select(
-        "id, created_at, tipo, accion, plan_anterior_nombre, plan_nuevo_nombre, modo, factura_id, plan_pendiente_vigente_desde, creado_por_email, creado_por_auth_user_id, detalle"
-      )
-      .eq("empresa_id", ctx.auth.empresa_id)
-      .eq("cliente_id", clienteId)
-      .order("created_at", { ascending: false })
-      .limit(MAX_ROWS);
+    const filas = await traerTodo((desde, hasta) =>
+      ctx.supabase
+        .from("cliente_historial")
+        .select(
+          "id, created_at, tipo, accion, plan_anterior_nombre, plan_nuevo_nombre, modo, factura_id, plan_pendiente_vigente_desde, creado_por_email, creado_por_auth_user_id, detalle"
+        )
+        .eq("empresa_id", ctx.auth.empresa_id)
+        .eq("cliente_id", clienteId)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(desde, hasta)
+    );
 
-    if (error) {
-      return NextResponse.json(errorResponse(error.message), { status: 500 });
-    }
-
-    return NextResponse.json(successResponse({ filas: rows ?? [] }));
+    return NextResponse.json(successResponse({ filas }));
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error al cargar historial";
     return NextResponse.json(errorResponse(msg), { status: 500 });

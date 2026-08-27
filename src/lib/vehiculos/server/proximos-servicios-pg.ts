@@ -196,7 +196,6 @@ export async function listProximosServicios(
          )
        )
      ORDER BY vencido DESC, dias_restantes NULLS LAST, km_restantes NULLS LAST
-     LIMIT 2000
     `,
     [empresaId, String(dias), opts.soloVencidos === true]
   );

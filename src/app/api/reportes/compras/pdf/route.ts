@@ -50,8 +50,7 @@ export async function GET(request: NextRequest) {
          FROM ${tC}
         WHERE empresa_id = $1::uuid AND (fecha ${PY})::date BETWEEN $2::date AND $3::date ${extra}
         GROUP BY numero_control
-        ORDER BY min(fecha) DESC
-        LIMIT 5000`,
+        ORDER BY min(fecha) DESC`,
       args
     );
 

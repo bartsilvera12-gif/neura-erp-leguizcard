@@ -2,6 +2,7 @@
  * Helpers server-side para el modulo Caja (1 sola caja por empresa).
  */
 import type { AppSupabaseClient } from "@/lib/supabase/schema";
+import { traerTodo } from "@/lib/supabase/traer-todo";
 import type {
   Caja,
   CajaDetalle,
@@ -157,20 +158,24 @@ async function numerosActivos(sb: AppSupabaseClient, empresaId: string): Promise
   return ((q.data ?? []) as Array<{ numero_caja: number | string }>).map((r) => num(r.numero_caja) || 1);
 }
 
-/** Historial de cajas (mas reciente primero). */
+/** Historial de cajas (mas reciente primero). Sin tope: vienen todas. */
 export async function listarCajas(
   sb: AppSupabaseClient,
-  empresaId: string,
-  limit = 50
+  empresaId: string
 ): Promise<Caja[]> {
-  const q = await sb
-    .from("cajas")
-    .select(CAJA_COLS)
-    .eq("empresa_id", empresaId)
-    .order("fecha_apertura", { ascending: false })
-    .limit(limit);
-  if (q.error) throw new Error(q.error.message);
-  return ((q.data ?? []) as unknown as CajaRow[]).map(mapCaja);
+  const filas = await traerTodo<CajaRow>((desde, hasta) =>
+    sb
+      .from("cajas")
+      .select(CAJA_COLS)
+      .eq("empresa_id", empresaId)
+      .order("fecha_apertura", { ascending: false })
+      .order("id", { ascending: false })
+      .range(desde, hasta) as unknown as PromiseLike<{
+      data: CajaRow[] | null;
+      error: { message: string } | null;
+    }>
+  );
+  return filas.map(mapCaja);
 }
 
 /**
@@ -959,6 +964,22 @@ export interface OtroIngreso {
  * Lista Otros Ingresos (tipo='ingreso' en caja_movimientos) con filtros.
  * Incluye anulados para mostrarlos tachados en el listado.
  */
+/** Fila cruda de caja_movimientos para Otros Ingresos. */
+type OtroIngresoRow = {
+  id: string;
+  caja_id: string;
+  concepto: string;
+  monto: number | string;
+  medio_pago: string | null;
+  observacion: string | null;
+  usuario_id: string | null;
+  usuario_email: string | null;
+  created_at: string;
+  anulado_at: string | null;
+  anulado_por_id: string | null;
+  anulado_motivo: string | null;
+};
+
 export async function listOtrosIngresos(
   sb: AppSupabaseClient,
   empresaId: string,
@@ -969,47 +990,35 @@ export async function listOtrosIngresos(
     cajaId?: string;
     estado?: "activos" | "anulados" | "todos";
     q?: string;              // busca en concepto + observacion
-    limit?: number;
   } = {}
 ): Promise<OtroIngreso[]> {
-  const limit = Math.max(1, Math.min(500, opts.limit ?? 200));
-  let q = sb
-    .from("caja_movimientos")
-    .select(
-      "id, caja_id, tipo, concepto, monto, medio_pago, observacion, usuario_id, usuario_email, created_at, anulado_at, anulado_por_id, anulado_motivo"
-    )
-    .eq("empresa_id", empresaId)
-    .eq("tipo", "ingreso")
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  const rows = await traerTodo<OtroIngresoRow>((desde, hasta) => {
+    let q = sb
+      .from("caja_movimientos")
+      .select(
+        "id, caja_id, tipo, concepto, monto, medio_pago, observacion, usuario_id, usuario_email, created_at, anulado_at, anulado_por_id, anulado_motivo"
+      )
+      .eq("empresa_id", empresaId)
+      .eq("tipo", "ingreso")
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false });
 
-  if (opts.medioPago) q = q.eq("medio_pago", opts.medioPago);
-  if (opts.cajaId) q = q.eq("caja_id", opts.cajaId);
-  if (opts.estado === "activos") q = q.is("anulado_at", null);
-  else if (opts.estado === "anulados") q = q.not("anulado_at", "is", null);
-  if (opts.fechaDesde) q = q.gte("created_at", `${opts.fechaDesde}T00:00:00`);
-  if (opts.fechaHasta) q = q.lte("created_at", `${opts.fechaHasta}T23:59:59.999`);
-  if (opts.q && opts.q.trim()) {
-    // Búsqueda por tokens (cada palabra en cualquier orden) en concepto + observación.
-    q = applyTokenSearch(q, opts.q, ["concepto", "observacion"]);
-  }
+    if (opts.medioPago) q = q.eq("medio_pago", opts.medioPago);
+    if (opts.cajaId) q = q.eq("caja_id", opts.cajaId);
+    if (opts.estado === "activos") q = q.is("anulado_at", null);
+    else if (opts.estado === "anulados") q = q.not("anulado_at", "is", null);
+    if (opts.fechaDesde) q = q.gte("created_at", `${opts.fechaDesde}T00:00:00`);
+    if (opts.fechaHasta) q = q.lte("created_at", `${opts.fechaHasta}T23:59:59.999`);
+    if (opts.q && opts.q.trim()) {
+      // Búsqueda por tokens (cada palabra en cualquier orden) en concepto + observación.
+      q = applyTokenSearch(q, opts.q, ["concepto", "observacion"]);
+    }
 
-  const { data, error } = await q;
-  if (error) throw new Error(error.message);
-  const rows = (data ?? []) as unknown as Array<{
-    id: string;
-    caja_id: string;
-    concepto: string;
-    monto: number | string;
-    medio_pago: string | null;
-    observacion: string | null;
-    usuario_id: string | null;
-    usuario_email: string | null;
-    created_at: string;
-    anulado_at: string | null;
-    anulado_por_id: string | null;
-    anulado_motivo: string | null;
-  }>;
+    return q.range(desde, hasta) as unknown as PromiseLike<{
+      data: OtroIngresoRow[] | null;
+      error: { message: string } | null;
+    }>;
+  });
 
   // Enrich con info de cajas (estado + fecha_apertura) para mostrar en UI.
   const cajaIds = [...new Set(rows.map((r) => r.caja_id))];

@@ -24,8 +24,7 @@ export async function GET(request: Request) {
       .eq("empresa_id", auth.empresaId)
       .eq("archivado", false)
       .eq("metadata->>facturacion_estado", "pendiente_caja")
-      .order("last_activity_at", { ascending: false })
-      .limit(200);
+      .order("last_activity_at", { ascending: false });
     if (error) return NextResponse.json(errorResponse(error.message), { status: 400 });
 
     const pedidos = ((data ?? []) as Record<string, unknown>[]).map((p) => {

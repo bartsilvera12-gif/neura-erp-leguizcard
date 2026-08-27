@@ -114,7 +114,7 @@ export async function listOrdenesCompra(
   const schema = assertAllowedChatDataSchema(schemaRaw);
   const t = quoteSchemaTable(schema, "ordenes_compra");
   const { rows } = await pool().query<OrdenCompraRow>(
-    `SELECT ${COLS} FROM ${t} WHERE empresa_id = $1::uuid ORDER BY fecha DESC LIMIT 1000`,
+    `SELECT ${COLS} FROM ${t} WHERE empresa_id = $1::uuid ORDER BY fecha DESC`,
     [empresaId]
   );
   return rows;

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
+import { traerTodo } from "@/lib/supabase/traer-todo";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import type { Venta, LineaVenta, TipoIvaVenta, VentaVehiculo } from "@/lib/ventas/types";
@@ -60,26 +61,31 @@ export async function GET(request: NextRequest) {
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
     const empresaId = ctx.auth.empresa_id;
 
-    const ventasQ = await ctx.supabase
-      .from("ventas")
-      .select(
-        "id, empresa_id, numero_control, moneda, tipo_cambio, subtotal, monto_iva, total, tipo_venta, plazo_dias, metodo_pago, fecha, cliente_id, observaciones"
-      )
-      .eq("empresa_id", empresaId)
-      .order("fecha", { ascending: false })
-      .limit(500);
-    if (ventasQ.error) throw new Error(ventasQ.error.message);
+    // Sin tope: se pide por tramos hasta agotar. Ordenar tambien por id hace
+    // que el corte entre tramos sea estable cuando dos ventas comparten fecha.
+    const ventasRows = await traerTodo<VentaRow>((desde, hasta) =>
+      ctx.supabase
+        .from("ventas")
+        .select(
+          "id, empresa_id, numero_control, moneda, tipo_cambio, subtotal, monto_iva, total, tipo_venta, plazo_dias, metodo_pago, fecha, cliente_id, observaciones"
+        )
+        .eq("empresa_id", empresaId)
+        .order("fecha", { ascending: false })
+        .order("id", { ascending: false })
+        .range(desde, hasta)
+    );
 
-    const itemsQ = await ctx.supabase
-      .from("ventas_items")
-      .select(
-        "venta_id, producto_id, producto_nombre, sku, cantidad, precio_venta_original, precio_venta, tipo_iva, subtotal, monto_iva, total_linea"
-      )
-      .eq("empresa_id", empresaId);
-    if (itemsQ.error) throw new Error(itemsQ.error.message);
-
-    const ventasRows = (ventasQ.data ?? []) as VentaRow[];
-    const itemsRows = (itemsQ.data ?? []) as VentaItemRow[];
+    const itemsRows = await traerTodo<VentaItemRow>((desde, hasta) =>
+      ctx.supabase
+        .from("ventas_items")
+        .select(
+          "venta_id, producto_id, producto_nombre, sku, cantidad, precio_venta_original, precio_venta, tipo_iva, subtotal, monto_iva, total_linea"
+        )
+        .eq("empresa_id", empresaId)
+        .order("venta_id")
+        .order("producto_id")
+        .range(desde, hasta)
+    );
 
     // Los nombres de cliente y vehiculo se resuelven aparte y se cruzan en JS,
     // igual que los items. Se piden solo los que aparecen en estas ventas, no
@@ -88,12 +94,15 @@ export async function GET(request: NextRequest) {
 
     // Los vehiculos de cada venta viven en ventas_vehiculos: una venta puede
     // cubrir varios, cada uno con su propio odometro.
-    const vvQ = await ctx.supabase
-      .from("ventas_vehiculos")
-      .select("venta_id, vehiculo_id, km_registrado, orden")
-      .eq("empresa_id", empresaId);
-    if (vvQ.error) throw new Error(vvQ.error.message);
-    const vvRows = (vvQ.data ?? []) as unknown as Record<string, unknown>[];
+    const vvRows = await traerTodo<Record<string, unknown>>((desde, hasta) =>
+      ctx.supabase
+        .from("ventas_vehiculos")
+        .select("venta_id, vehiculo_id, km_registrado, orden")
+        .eq("empresa_id", empresaId)
+        .order("venta_id")
+        .order("orden")
+        .range(desde, hasta)
+    );
     const idsVeh = [...new Set(vvRows.map((r) => String(r.vehiculo_id)))];
 
     const [cliQ, vehQ] = await Promise.all([

@@ -51,8 +51,7 @@ export async function GET(request: NextRequest) {
           AND (s.fecha ${PY})::date BETWEEN $2::date AND $3::date
           AND (costo_act <> costo_ant OR COALESCE(precio_act,0) <> COALESCE(precio_ant,0))
           ${provCond}
-        ORDER BY s.fecha DESC
-        LIMIT 5000`,
+        ORDER BY s.fecha DESC`,
       args
     );
 

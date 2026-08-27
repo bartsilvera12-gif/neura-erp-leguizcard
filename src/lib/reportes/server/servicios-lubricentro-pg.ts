@@ -116,7 +116,6 @@ export async function listRentabilidadServicios(
      GROUP BY p.id, p.nombre, p.sku, cr.costo_unitario, cr.producto_id,
               p.servicio_intervalo_km, p.servicio_intervalo_meses, p.costo_promedio
      ORDER BY SUM(l.total_linea) DESC
-     LIMIT 500
     `,
     [empresaId, desde, hasta]
   );
@@ -171,7 +170,6 @@ export async function listCatalogoServicios(
        AND (p.servicio_intervalo_km IS NOT NULL OR p.servicio_intervalo_meses IS NOT NULL)
        AND COALESCE(p.activo, true) = true
      ORDER BY p.nombre
-     LIMIT 500
     `,
     [empresaId]
   );
@@ -234,7 +232,6 @@ export async function listHistorialClientes(
      WHERE c.empresa_id = $1::uuid
        AND (a.n IS NOT NULL OR v.visitas IS NOT NULL)
      ORDER BY v.ultima DESC NULLS LAST
-     LIMIT 1000
     `,
     [empresaId]
   );

@@ -121,8 +121,7 @@ export async function getReporteVentasDetalle(
      WHERE v.empresa_id = $1::uuid
        AND (v.fecha AT TIME ZONE INTERVAL '-3 hours')::date BETWEEN $2::date AND $3::date
        ${where}
-     ORDER BY v.fecha DESC
-     LIMIT 5000`,
+     ORDER BY v.fecha DESC`,
     args
   );
 

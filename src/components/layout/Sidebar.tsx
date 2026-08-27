@@ -9,7 +9,7 @@ import {
   // Inbox,
   // usado por el ítem "Recepción" (oculto)
   // ReceiptText, -- lo usa el item Recibos, hoy oculto
-  Banknote,
+  // Banknote, -- lo usa el item Cobranzas, hoy oculto
   BarChart3,
   Building2,
   Car,
@@ -24,7 +24,7 @@ import {
   Package,
   Percent,
   Receipt,
-  ScrollText,
+  // ScrollText, -- lo usa el item Notas de crédito, hoy oculto
   Search,
   SendHorizontal,
   Settings,
@@ -36,7 +36,7 @@ import {
   UserCog,
   Users,
   Utensils,
-  Wallet,
+  // Wallet, -- lo usa el item Pagos, hoy oculto
   Wrench,
 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
@@ -149,10 +149,14 @@ const MENU_STRUCTURE: MenuItem[] = [
   // Para reactivar: descomentar esta línea, el import de `ReceiptText` y la
   // key "recibos" en MENU_FAMILIES.
   // { key: "recibos", slug: "recibos", label: "Recibos", href: "/recibos", icon: ReceiptText },
-  {
-    key: "notas_credito", slug: "notas_credito", label: "Notas de crédito",
-    href: "/notas-credito", icon: ScrollText,
-  },
+  // Notas de crédito OCULTAS de la interfaz (pedido del negocio). La pantalla
+  // queda en pie: la corrección fiscal de una factura enlaza a ella.
+  // Para reactivar: descomentar esto, el import de `ScrollText` y la key
+  // "notas_credito" en MENU_FAMILIES.
+  // {
+  //   key: "notas_credito", slug: "notas_credito", label: "Notas de crédito",
+  //   href: "/notas-credito", icon: ScrollText,
+  // },
   // Vehiculos: autos de los clientes. El historial de servicios del lubricentro
   // cuelga de cada vehiculo, no del cliente.
   {
@@ -175,12 +179,22 @@ const MENU_STRUCTURE: MenuItem[] = [
   // Para reactivar: descomentar esta línea, el import de `ChefHat` y la key
   // "recetas" en MENU_FAMILIES.
   // { key: "recetas", slug: "recetas", label: "Recetas", href: "/dashboard/recetas", icon: ChefHat },
-  // Cobranzas: cuentas por cobrar y registro de cobros.
-  { key: "cobros", slug: "cobros", label: "Cobranzas", href: "/cobros", icon: Banknote },
+  // Cobranzas: cuentas por cobrar y registro de cobros. OCULTA de la interfaz
+  // (pedido del negocio).
+  //
+  // OJO: es la unica pantalla donde se cobra una venta a credito. Mientras no
+  // se venda a plazo no hace falta; el dia que se venda, la cuenta queda sin
+  // lugar donde cobrarse.
+  //
+  // Para reactivar: descomentar esta línea, el import de `Banknote` y la key
+  // "cobros" en MENU_FAMILIES.
+  // { key: "cobros", slug: "cobros", label: "Cobranzas", href: "/cobros", icon: Banknote },
   // Comisiones de vendedores (politicas, periodos y liquidacion).
   { key: "comisiones", slug: "comisiones", label: "Comisiones", href: "/comisiones", icon: Percent },
-  // Pagos recibidos de clientes.
-  { key: "pagos", slug: "pagos", label: "Pagos", href: "/pagos", icon: Wallet },
+  // Pagos recibidos de clientes. OCULTA de la interfaz (pedido del negocio).
+  // Para reactivar: descomentar esta línea, el import de `Wallet` y la key
+  // "pagos" en MENU_FAMILIES.
+  // { key: "pagos", slug: "pagos", label: "Pagos", href: "/pagos", icon: Wallet },
   // Reportes: hub con toda la reporteria. El panel del turno de caja vive
   // dentro de /ventas; sus arqueos se consultan en /reportes/cajas.
   {
@@ -220,7 +234,7 @@ const MENU_STRUCTURE: MenuItem[] = [
 const MENU_FAMILIES: { id: string; titulo: string; keys: string[] }[] = [
   { id: "inicio", titulo: "Inicio", keys: ["dashboard"] },
   { id: "comercial", titulo: "Comercial", keys: ["clientes", "vehiculos", "ventas", "presupuestos"] },
-  { id: "finanzas", titulo: "Finanzas", keys: ["cobros", "pagos", "gastos", "notas_credito", "comisiones", "reportes"] },
+  { id: "finanzas", titulo: "Finanzas", keys: ["gastos", "comisiones", "reportes"] },
   { id: "operaciones", titulo: "Operaciones", keys: ["inventario", "servicios", "compras"] },
   { id: "omnicanal", titulo: "Omnicanal", keys: ["conversaciones"] },
   { id: "administracion", titulo: "Administración", keys: ["usuarios", "configuracion"] },

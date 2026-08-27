@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -104,9 +105,12 @@ export default function VehiculosPage() {
           </div>
         ) : (
           <EdgeScrollArea className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
+            <table className="w-full min-w-[820px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-slate-400">
+                  {/* La foto no lleva encabezado: se reconoce sola y el titulo
+                      solo agregaria ruido sobre una columna de 3 cm. */}
+                  <th className="w-14 pb-2 pr-3 font-medium" aria-label="Foto" />
                   <th className="pb-2 pr-3 font-medium">Patente</th>
                   <th className="pb-2 pr-3 font-medium">Vehículo</th>
                   <th className="pb-2 pr-3 font-medium">Cliente</th>
@@ -131,6 +135,26 @@ export default function VehiculosPage() {
                     aria-label={`Ver la ficha de ${v.patente}`}
                     className="cursor-pointer border-b border-slate-100 last:border-0 transition-colors hover:bg-slate-50/60 focus:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4FAEB2]/40"
                   >
+                    <td className="py-2 pr-3">
+                      <div className="relative h-9 w-12 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                        {v.imagen_url ? (
+                          <Image
+                            src={v.imagen_url}
+                            alt=""
+                            fill
+                            sizes="48px"
+                            // URL firmada, de host externo y con vencimiento: el
+                            // optimizador de Next no la puede procesar.
+                            unoptimized
+                            className="object-cover"
+                          />
+                        ) : (
+                          <span className="flex h-full w-full items-center justify-center">
+                            <Car className="h-4 w-4 text-slate-300" />
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-2.5 pr-3">
                       <Link
                         href={`/vehiculos/${v.id}`}

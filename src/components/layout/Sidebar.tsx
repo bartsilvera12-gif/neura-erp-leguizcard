@@ -13,7 +13,7 @@ import {
   BarChart3,
   Building2,
   Car,
-  ChefHat,
+  // ChefHat, -- lo usa el item Recetas, hoy oculto
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -32,7 +32,7 @@ import {
   Sparkles,
   Star,
   Ticket,
-  Truck,
+  // Truck, -- lo usa el item Remisión, hoy oculto
   UserCog,
   Users,
   Utensils,
@@ -121,7 +121,11 @@ const MENU_STRUCTURE: MenuItem[] = [
     ],
   },
   // Remisión y Recepción son módulos independientes: emitir vs recibir mercadería.
-  { key: "remision", slug: "remision", label: "Remisión", href: "/notas-remision", icon: Truck },
+  // Ambos OCULTOS de la interfaz (pedido del negocio: un lubricentro de una sola
+  // sucursal no mueve mercadería entre depósitos). Para reactivar Remisión:
+  // descomentar esta línea, el import de `Truck` y la key "remision" en
+  // MENU_FAMILIES. No se borró nada: las pantallas, la API y los datos siguen.
+  // { key: "remision", slug: "remision", label: "Remisión", href: "/notas-remision", icon: Truck },
   // Recepción OCULTA de la interfaz (pedido del negocio: una sola sucursal, no se
   // usa el circuito de recibir mercadería). Para reactivar: descomentar esta línea,
   // el import de `Inbox`, la key "recepcion" en MENU_FAMILIES y quitar el guard de
@@ -145,10 +149,18 @@ const MENU_STRUCTURE: MenuItem[] = [
     ],
   },
   // Servicios del lubricentro: mano de obra + los productos que consume, todo
-  // en una pantalla. Se apoya en Recetas, que queda para casos que no son un
-  // servicio (composicion y costeo de un producto cualquiera).
+  // en una pantalla.
   { key: "servicios", slug: "servicios", label: "Servicios", href: "/servicios", icon: Wrench },
-  { key: "recetas", slug: "recetas", label: "Recetas", href: "/dashboard/recetas", icon: ChefHat },
+  // Recetas OCULTA de la interfaz (pedido del negocio: la receta de un servicio
+  // se carga desde Servicios, y no hay otro producto compuesto que costear).
+  //
+  // OJO: se oculta la PANTALLA, no la maquinaria. Cada servicio sigue teniendo
+  // su receta debajo, y de ahi salen el costo y el descuento de stock. Borrar
+  // recetas romperia los servicios.
+  //
+  // Para reactivar: descomentar esta línea, el import de `ChefHat` y la key
+  // "recetas" en MENU_FAMILIES.
+  // { key: "recetas", slug: "recetas", label: "Recetas", href: "/dashboard/recetas", icon: ChefHat },
   // Cobranzas: cuentas por cobrar y registro de cobros.
   { key: "cobros", slug: "cobros", label: "Cobranzas", href: "/cobros", icon: Banknote },
   // Comisiones de vendedores (politicas, periodos y liquidacion).
@@ -195,7 +207,7 @@ const MENU_FAMILIES: { id: string; titulo: string; keys: string[] }[] = [
   { id: "inicio", titulo: "Inicio", keys: ["dashboard"] },
   { id: "comercial", titulo: "Comercial", keys: ["clientes", "vehiculos", "gestion-clientes", "ventas", "presupuestos"] },
   { id: "finanzas", titulo: "Finanzas", keys: ["cobros", "pagos", "recibos", "gastos", "notas_credito", "comisiones", "reportes"] },
-  { id: "operaciones", titulo: "Operaciones", keys: ["inventario", "servicios", "compras", "remision", "recetas"] },
+  { id: "operaciones", titulo: "Operaciones", keys: ["inventario", "servicios", "compras"] },
   { id: "omnicanal", titulo: "Omnicanal", keys: ["conversaciones"] },
   { id: "administracion", titulo: "Administración", keys: ["usuarios", "configuracion"] },
 ];

@@ -260,7 +260,43 @@ export async function createVentaTransaccionalPg(
       if (insVeh.error) throw new Error(insVeh.error.message);
     }
 
-    // 7) Descuento de stock + movimientos solo para productos con controla_stock=true.
+    // 7) Descuento de stock.
+    //
+    // Un servicio no controla stock por si mismo, pero consume insumos: vender
+    // "Cambio de aceite" tiene que bajar los 4 L de aceite y el filtro. Esa
+    // explosion se resuelve en la base con fn_receta_explosion(), que aplica la
+    // misma conversion de unidades y merma que el costeo; duplicar esa
+    // aritmetica en TypeScript seria la forma de que el costo y el consumo
+    // terminen diciendo cosas distintas.
+    const consumos = await explotarServicios(sb, params.empresaId, items);
+    for (const c of consumos) {
+      const upd = await sb
+        .from("productos")
+        .update({ stock_actual: c.stock_nuevo })
+        .eq("id", c.producto_id)
+        .eq("empresa_id", params.empresaId);
+      if (upd.error) throw new Error(upd.error.message);
+
+      const mov = await sb.from("movimientos_inventario").insert({
+        empresa_id: params.empresaId,
+        producto_id: c.producto_id,
+        producto_nombre: c.producto_nombre,
+        producto_sku: c.sku,
+        tipo: "SALIDA",
+        cantidad: c.cantidad,
+        costo_unitario: c.costo_unitario,
+        origen: "venta",
+        // Deja rastro de por que salio: no fue una venta directa del insumo.
+        referencia: `${numeroControl} · ${c.servicio_nombre}`,
+        fecha: fechaIso,
+        venta_id: ventaId,
+        created_by: params.createdBy ?? null,
+        usuario_nombre: params.usuarioNombre ?? null,
+      });
+      if (mov.error) throw new Error(mov.error.message);
+    }
+
+    // Productos vendidos directamente, con controla_stock=true.
     for (const line of items) {
       const p = stockMap.get(line.producto_id)!;
       if (!p.controlaStock) continue;
@@ -375,4 +411,98 @@ export async function createVentaTransaccionalPg(
     await rollback();
     throw err;
   }
+}
+
+
+/** Un insumo que hay que descontar por haber vendido un servicio. */
+interface ConsumoServicio {
+  producto_id: string;
+  producto_nombre: string;
+  sku: string | null;
+  cantidad: number;
+  costo_unitario: number;
+  stock_nuevo: number;
+  servicio_nombre: string;
+}
+
+/**
+ * Explota los servicios de la venta en el consumo de insumos que generan.
+ *
+ * Agrupa por insumo antes de tocar la base: si una venta lleva dos servicios
+ * que usan el mismo aceite, tiene que salir UN descuento por la suma y no dos
+ * updates pisandose.
+ *
+ * Los insumos que no controlan stock se ignoran, igual que en una venta directa.
+ */
+async function explotarServicios(
+  sb: ReturnType<typeof createServiceRoleClientWithDbSchema>,
+  empresaId: string,
+  items: CreateVentaItemInput[]
+): Promise<ConsumoServicio[]> {
+  const ids = [...new Set(items.map((i) => i.producto_id))];
+  if (!ids.length) return [];
+
+  // Que productos de la venta son servicios con receta activa.
+  const recQ = await sb
+    .from("recetas")
+    .select("id, producto_id")
+    .eq("empresa_id", empresaId)
+    .eq("activa", true)
+    .in("producto_id", ids);
+  if (recQ.error) throw new Error(recQ.error.message);
+  const recetas = (recQ.data ?? []) as unknown as { id: string; producto_id: string }[];
+  if (!recetas.length) return [];
+
+  const acumulado = new Map<string, { cantidad: number; servicios: Set<string> }>();
+
+  for (const r of recetas) {
+    const veces = items
+      .filter((i) => i.producto_id === r.producto_id)
+      .reduce((s, i) => s + i.cantidad, 0);
+    if (veces <= 0) continue;
+
+    const expQ = await sb.rpc("fn_receta_explosion", { p_receta_id: r.id, p_veces: veces });
+    if (expQ.error) throw new Error(expQ.error.message);
+    const filas = (expQ.data ?? []) as unknown as {
+      insumo_producto_id: string;
+      cantidad_efectiva: number | string;
+    }[];
+
+    const nombreServicio =
+      items.find((i) => i.producto_id === r.producto_id)?.producto_nombre ?? "servicio";
+
+    for (const f of filas) {
+      const id = String(f.insumo_producto_id);
+      const prev = acumulado.get(id) ?? { cantidad: 0, servicios: new Set<string>() };
+      prev.cantidad += Number(f.cantidad_efectiva) || 0;
+      prev.servicios.add(nombreServicio);
+      acumulado.set(id, prev);
+    }
+  }
+  if (!acumulado.size) return [];
+
+  const insQ = await sb
+    .from("productos")
+    .select("id, nombre, sku, stock_actual, costo_promedio, controla_stock")
+    .eq("empresa_id", empresaId)
+    .in("id", [...acumulado.keys()]);
+  if (insQ.error) throw new Error(insQ.error.message);
+
+  const out: ConsumoServicio[] = [];
+  for (const p of (insQ.data ?? []) as unknown as Record<string, unknown>[]) {
+    const id = String(p.id);
+    const acc = acumulado.get(id);
+    if (!acc || acc.cantidad <= 0) continue;
+    if (p.controla_stock === false) continue;
+    out.push({
+      producto_id: id,
+      producto_nombre: String(p.nombre ?? ""),
+      sku: (p.sku as string | null) ?? null,
+      cantidad: acc.cantidad,
+      costo_unitario: Number(p.costo_promedio) || 0,
+      stock_nuevo: (Number(p.stock_actual) || 0) - acc.cantidad,
+      servicio_nombre: [...acc.servicios].join(" + "),
+    });
+  }
+  return out;
 }

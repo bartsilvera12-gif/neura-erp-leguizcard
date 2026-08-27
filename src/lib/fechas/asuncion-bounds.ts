@@ -26,6 +26,49 @@ function asuncionYearMonth(now: Date): { year: number; month: number } {
   return { year, month };
 }
 
+/**
+ * Fecha y hora de Asunción para MOSTRAR, no para filtrar.
+ *
+ * Existe porque los documentos que arma el servidor (ticket, orden de compra)
+ * usaban `getHours()`, que devuelve la hora del contenedor — UTC. El ticket
+ * salia tres horas adelantado, y despues de las 21:00 de Paraguay tambien con
+ * la fecha del dia siguiente.
+ *
+ * Las pantallas del navegador NO necesitan esto: ahi la hora local ya es la de
+ * Paraguay.
+ */
+export function fechaHoraAsuncion(iso: string): string {
+  try {
+    const partes = new Intl.DateTimeFormat("es-PY", {
+      timeZone: TZ,
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(new Date(iso));
+    const v = (t: string) => partes.find((p) => p.type === t)?.value ?? "";
+    return `${v("day")}/${v("month")}/${v("year")} ${v("hour")}:${v("minute")}`;
+  } catch {
+    return iso;
+  }
+}
+
+/** Solo la fecha, en Asunción. Mismo motivo que arriba. */
+export function fechaAsuncion(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString("es-PY", {
+      timeZone: TZ,
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  } catch {
+    return iso;
+  }
+}
+
 /** Inicio y fin (inclusive) del día de hoy en Asunción, como ISO UTC. */
 export function asuncionDayBoundsUtc(now: Date = new Date()): { start: string; end: string } {
   const ymd = asuncionYmd(now);

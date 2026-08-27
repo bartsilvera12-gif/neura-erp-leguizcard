@@ -29,7 +29,8 @@ function fecha(iso: unknown): string {
   if (!iso) return "—";
   const d = new Date(String(iso));
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("es-PY", { day: "2-digit", month: "2-digit", year: "numeric" });
+  // Sin la zona, el servidor (UTC) adelanta un dia despues de las 21:00 de acá.
+  return d.toLocaleDateString("es-PY", { timeZone: "America/Asuncion", day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 const ESTADO_LABEL: Record<string, string> = {

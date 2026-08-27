@@ -80,11 +80,14 @@ export function membreteTicket(origin = ""): string {
   const e = EMPRESA_DOC;
   const src = e.logoTicketUrl || e.logoUrl;
   const logo = src ? (origin ? `${origin}${src}` : src) : "";
-  // image-rendering:pixelated evita que el navegador suavice el PNG al escalar:
-  // el logo ya viene binarizado y un remuestreo suave le devolveria los grises
-  // que la termica no puede imprimir.
+  // El logo binarizado mide 384 px de ancho y se muestra en 118: es una
+  // REDUCCION de mas de 3x. image-rendering:pixelated servia para ampliar sin
+  // que se pongan borrosos los bordes, pero al reducir hace lo contrario —
+  // saltea pixeles y le come pedazos a los trazos finos, que es por que el logo
+  // se veia dentado. Dejando que el navegador remuestree, el borde sale limpio;
+  // los grises que aparecen los resuelve el umbral de la termica al imprimir.
   const logoHtml = logo
-    ? `<img src="${esc(logo)}" alt="${esc(e.nombre)}" style="max-width:118px;width:100%;height:auto;object-fit:contain;display:block;margin:0 auto 4px;image-rendering:pixelated;" />`
+    ? `<img src="${esc(logo)}" alt="${esc(e.nombre)}" style="max-width:132px;width:100%;height:auto;object-fit:contain;display:block;margin:0 auto 6px;" />`
     : "";
   // Si el logo ya trae el nombre, no se repite en texto. Sin logo siempre se
   // imprime: el ticket no puede salir sin identificar al negocio.

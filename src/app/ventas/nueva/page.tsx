@@ -567,6 +567,7 @@ export default function NuevaVentaPage() {
           metodo_valuacion: (typeof p.metodo_valuacion === "string" ? p.metodo_valuacion : "CPP") as MetodoValuacion,
           es_vendible: p.es_vendible !== false,
           controla_stock: p.controla_stock !== false,
+          tipo_producto: (p.tipo_producto as Producto["tipo_producto"]) ?? "reventa",
           imagen_url: (p.imagen_url as string | null) ?? null,
           imagen_path: (p.imagen_path as string | null) ?? null,
         }));
@@ -1250,7 +1251,7 @@ export default function NuevaVentaPage() {
             setComboOpen(true);
           }}
           onKeyDown={onComboKeyDown}
-          placeholder={vehId ? "Buscar producto para este vehículo…" : "Buscar producto por nombre, SKU o palabras clave…"}
+          placeholder={vehId ? "Buscar servicio o producto para este vehículo…" : "Buscar servicio o producto por nombre, SKU o palabras clave…"}
           className="h-11 w-full rounded-xl border-2 border-[#0EA5E9]/30 bg-white pl-12 pr-4 text-sm text-slate-800 outline-none transition-all focus:border-[#0EA5E9] focus:ring-4 focus:ring-[#0EA5E9]/15"
           autoComplete="off"
         />
@@ -1263,7 +1264,8 @@ export default function NuevaVentaPage() {
             ) : (
               <ul className="divide-y divide-slate-100">
                 {comboResultados.map((p, i) => {
-                  const sinStock = (p.stock_actual ?? 0) <= 0;
+                  const esServicio = p.tipo_producto === "servicio";
+                  const sinStock = !esServicio && (p.stock_actual ?? 0) <= 0;
                   return (
                     <li key={p.id}>
                       <button
@@ -1279,9 +1281,15 @@ export default function NuevaVentaPage() {
                           <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
                             <span className="font-mono">{p.sku}</span>
                             <span className="text-slate-300">·</span>
-                            <span className={`font-semibold ${sinStock ? "text-red-600" : (p.stock_actual ?? 0) < 5 ? "text-amber-600" : "text-emerald-700"}`}>
-                              {sinStock ? "Sin stock" : formatStockConUnidad(p.stock_actual ?? 0, p.unidad_medida)}
-                            </span>
+                            {esServicio ? (
+                              <span className="rounded bg-[#4FAEB2]/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#3F8E91]">
+                                Servicio
+                              </span>
+                            ) : (
+                              <span className={`font-semibold ${sinStock ? "text-red-600" : (p.stock_actual ?? 0) < 5 ? "text-amber-600" : "text-emerald-700"}`}>
+                                {sinStock ? "Sin stock" : formatStockConUnidad(p.stock_actual ?? 0, p.unidad_medida)}
+                              </span>
+                            )}
                           </div>
                         </div>
                         <span className="shrink-0 text-sm font-bold tabular-nums text-slate-800">{formatGs(precioPorTipo(p, "minorista"))}</span>
@@ -1608,7 +1616,7 @@ export default function NuevaVentaPage() {
 
                 {filas.length === 0 ? (
                   <p className="mt-3 rounded-lg border border-dashed border-slate-200 bg-white/60 py-5 text-center text-xs text-slate-400">
-                    Buscá arriba lo que se le puso a este vehículo.
+                    Buscá arriba el servicio que se le hizo y lo que se le puso.
                   </p>
                 ) : (
                   <>
@@ -1660,7 +1668,7 @@ export default function NuevaVentaPage() {
               </div>
               {itemsSinVehiculo.length === 0 ? (
                 <div className="mt-4 rounded-lg border-2 border-dashed border-gray-200 py-10 text-center text-sm text-gray-400">
-                  Buscá un producto arriba, o añadí un vehículo para cargarle lo que se le puso.
+                  Buscá un servicio o producto arriba, o añadí un vehículo para cargarle lo que se le hizo.
                 </div>
               ) : (
                 tablaItems(itemsSinVehiculo)

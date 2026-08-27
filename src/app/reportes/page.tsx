@@ -20,7 +20,7 @@ export default function ReportesPage() {
             title="Servicios del lubricentro"
             subtitle="Ranking y rentabilidad por servicio"
             icon={Wrench}
-            description="Qué servicios se hacen, cuánto dejan, y el margen de cada uno según el costo de su receta."
+            description="Qué servicios se hacen, cuánto dejan, y el margen de cada uno según lo que consumen."
             href="/reportes/servicios"
           />
         </li>

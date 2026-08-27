@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AlertCircle } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
@@ -77,7 +78,7 @@ export default function ReporteServiciosPage() {
       <PageHeader
         eyebrow="Zentra · Taller"
         title="Servicios del lubricentro"
-        description="Qué servicios se hacen, cuánto dejan, y qué margen tiene cada uno según su receta."
+        description="Qué servicios se hacen, cuánto dejan, y qué margen tiene cada uno según lo que consumen."
         backHref="/reportes"
         backLabel="Volver a reportes"
       />
@@ -86,7 +87,7 @@ export default function ReporteServiciosPage() {
 
       {totales && (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard compact label="Servicios en catálogo" value={String(totales.servicios)} hint={`${totales.sin_receta} sin receta`} />
+          <StatCard compact label="Servicios en catálogo" value={String(totales.servicios)} hint={`${totales.sin_receta} sin insumos cargados`} />
           <StatCard compact label="Realizados en el período" value={String(totales.realizados)} />
           <StatCard compact label="Facturado" value={gs(totales.facturado)} />
           <StatCard compact label="Margen" value={gs(totales.margen)} hint={`costo ${gs(totales.costo)}`} />
@@ -98,9 +99,14 @@ export default function ReporteServiciosPage() {
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
           <p className="text-sm text-amber-800">
             <strong>{totales.sin_receta}</strong>{" "}
-            {totales.sin_receta === 1 ? "servicio no tiene receta" : "servicios no tienen receta"}. Sin
-            receta no se puede calcular su costo real, y el margen queda igual al precio. Cargala en{" "}
-            <strong>Recetas</strong>.
+            {totales.sin_receta === 1
+              ? "servicio no tiene cargados los productos que consume"
+              : "servicios no tienen cargados los productos que consumen"}. Sin eso no se puede
+            calcular su costo real y el margen queda igual al precio. Se cargan en{" "}
+            <Link href="/servicios" className="font-semibold underline underline-offset-2">
+              Servicios
+            </Link>
+            .
           </p>
         </div>
       )}
@@ -112,8 +118,8 @@ export default function ReporteServiciosPage() {
           <div className="py-12 text-center">
             <p className="text-sm font-medium text-slate-600">Todavía no hay servicios cargados.</p>
             <p className="mt-1 text-xs text-slate-400">
-              Un servicio es un producto con tipo <strong>Servicio</strong>. Cargale una receta con los
-              insumos que consume y aparecerá acá con su costo y margen, aún sin ventas.
+              Creá uno en <Link href="/servicios" className="font-semibold text-[#3F8E91] underline underline-offset-2">Servicios</Link>{" "}
+              con los productos que consume, y aparece acá con su costo y su margen aún sin ventas.
             </p>
           </div>
         ) : (
@@ -123,7 +129,7 @@ export default function ReporteServiciosPage() {
                 <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-slate-400">
                   <th className="pb-2 pr-3 font-medium">Servicio</th>
                   <th className="pb-2 pr-3 text-right font-medium">Precio</th>
-                  <th className="pb-2 pr-3 text-right font-medium">Costo receta</th>
+                  <th className="pb-2 pr-3 text-right font-medium">Costo insumos</th>
                   <th className="pb-2 pr-3 text-right font-medium">Margen teórico</th>
                   <th className="pb-2 pr-3 text-right font-medium">Veces</th>
                   <th className="pb-2 pr-3 text-right font-medium">Facturado</th>
@@ -140,7 +146,7 @@ export default function ReporteServiciosPage() {
                         {i.tiene_receta ? (
                           <span> · {i.insumos} insumo{i.insumos === 1 ? "" : "s"}</span>
                         ) : (
-                          <span className="text-amber-600"> · sin receta</span>
+                          <span className="text-amber-600"> · sin insumos</span>
                         )}
                         {(i.intervalo_km || i.intervalo_meses) && (
                           <span>
@@ -185,10 +191,10 @@ export default function ReporteServiciosPage() {
           </EdgeScrollArea>
         )}
         <p className="mt-4 text-[11px] text-slate-400">
-          El <strong>margen teórico</strong> compara precio contra el costo de la receta y no depende de
-          que haya ventas: sirve para revisar precios desde el día uno. El <strong>margen real</strong> usa
-          lo efectivamente facturado en el período. El costo sale de <code>fn_receta_costeo()</code>, que
-          contempla conversión de unidades, merma y rendimiento.
+          El <strong>margen teórico</strong> compara el precio contra lo que cuestan los productos que
+          consume, y no depende de que haya ventas: sirve para revisar precios desde el día uno. El{" "}
+          <strong>margen real</strong> usa lo efectivamente facturado en el período. El costo lo calcula
+          el sistema convirtiendo las unidades (litros contra galones) y sumando la merma.
         </p>
       </div>
     </div>

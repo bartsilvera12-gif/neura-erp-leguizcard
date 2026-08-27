@@ -57,6 +57,28 @@ export interface LineaVenta {
   presentacion_id?:           string | null;
   presentacion_nombre?:       string | null;
   presentacion_cantidad_base?: number | null;
+  /**
+   * Si la linea es un servicio: los productos que consume, para poder verlos y
+   * corregirlos en el mostrador (a esta le entraron 4 L y no 3,7; a esta no se
+   * le cambio el filtro). Se manda al guardar y pisa la cantidad de la receta.
+   *
+   * `cantidad_receta` es lo que dice la receta, para saber que se toco y poder
+   * volver atras. Solo vive en el cliente.
+   */
+  insumos?: LineaInsumoServicio[] | null;
+}
+
+/** Un producto que consume un servicio dentro de una linea de venta. */
+export interface LineaInsumoServicio {
+  insumo_producto_id: string;
+  insumo_nombre:      string;
+  /** En la unidad de la receta (7,5 L), no en la del producto (galones). */
+  cantidad:           number;
+  unidad_medida:      string | null;
+  /** Lo que dice la receta. Solo cliente: sirve para marcar el cambio. */
+  cantidad_receta?:   number;
+  /** Stock del insumo al momento de armar la venta. Solo cliente. */
+  stock_actual?:      number;
 }
 
 /** Cabecera de venta: condiciones comerciales + totales consolidados. */

@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Search, Plus, Minus, Trash2, ImageIcon, Wallet, Car, AlertTriangle, Loader2 } from "lucide-react";
+import { Search, Plus, Minus, Trash2, ImageIcon, Wallet, Car, AlertTriangle, Loader2, ChevronDown, ChevronRight, RotateCcw } from "lucide-react";
 import MontoInput from "@/components/ui/MontoInput";
 import { FancySelect } from "@/components/ui/FancySelect";
 import ProductPickerModal, { type ProductoPickerItem, type AgregarVentaPayload } from "@/components/inventario/ProductPickerModal";
@@ -14,9 +14,11 @@ import { getVehiculos } from "@/lib/vehiculos/storage";
 import BuscadorVehiculo from "@/components/vehiculos/BuscadorVehiculo";
 import { normalizarPatente, type Vehiculo } from "@/lib/vehiculos/types";
 import { generarYAbrirRecibo } from "@/lib/recibos/client";
-import type { TipoIvaVenta, TipoVenta, MonedaVenta, LineaVenta, MetodoPago, TipoPrecioVenta } from "@/lib/ventas/types";
+import type { TipoIvaVenta, TipoVenta, MonedaVenta, LineaVenta, LineaInsumoServicio, MetodoPago, TipoPrecioVenta } from "@/lib/ventas/types";
+import { getServicios, type Servicio } from "@/lib/servicios/storage";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { productoMatchesQuery } from "@/lib/productos/token-search";
+import { cantidadEnUnidadDelProducto } from "@/lib/servicios/unidades";
 import {
   permiteDecimales, pasoCantidad, clampCantidad,
   formatStockConUnidad,
@@ -139,6 +141,13 @@ export default function NuevaVentaPage() {
 
   // ── Estado global ──────────────────────────────────────────────────────────
   const [productos, setProductos]   = useState<Producto[]>([]);
+  /**
+   * Servicios con su receta, para poder desglosar en el carrito que productos
+   * lleva cada uno. Son pocos: se traen una vez y se indexan por producto.
+   */
+  const [servicios, setServicios]   = useState<Servicio[]>([]);
+  /** Que lineas de servicio tienen el desglose abierto. Key: producto+vehiculo. */
+  const [insumosAbiertos, setInsumosAbiertos] = useState<Set<string>>(new Set());
   const [items, setItems]           = useState<LineaVenta[]>([]);
   const [errorLinea, setErrorLinea] = useState<string | null>(null);
   const [errorVenta, setErrorVenta] = useState<string | null>(null);
@@ -362,6 +371,11 @@ export default function NuevaVentaPage() {
     let cancelled = false;
     getProductos().then((data) => {
       if (!cancelled) setProductos(data);
+    });
+    // Si falla, el carrito funciona igual: sin desglose, el servidor explota la
+    // receta como siempre. No es motivo para trabar la venta.
+    getServicios().then((data) => {
+      if (!cancelled) setServicios(data);
     });
     return () => { cancelled = true; };
   }, []);
@@ -1118,13 +1132,183 @@ export default function NuevaVentaPage() {
    * `idx` es la posicion en `items`, no en la lista visible: los handlers
    * (cantidad, precio, eliminar) trabajan sobre el arreglo completo.
    */
+  const servicioPorProducto = useMemo(
+    () => new Map(servicios.map((sv) => [sv.id, sv])),
+    [servicios]
+  );
+
+  /** Key estable de una linea: no se corre cuando se borra otra. */
+  function claveLinea(it: LineaVenta): string {
+    return `${it.producto_id}|${it.vehiculo_id ?? ""}`;
+  }
+
+  /**
+   * Los insumos que hay que mostrar: los ajustados si el cajero toco algo, si
+   * no los de la receta. `null` = la linea no es un servicio con receta.
+   */
+  function insumosDeLinea(it: LineaVenta): LineaInsumoServicio[] | null {
+    if (it.insumos?.length) return it.insumos;
+    const sv = servicioPorProducto.get(it.producto_id);
+    if (!sv || sv.insumos.length === 0) return null;
+    return sv.insumos.map((i) => ({
+      insumo_producto_id: i.insumo_producto_id,
+      insumo_nombre: i.insumo_nombre,
+      cantidad: i.cantidad,
+      unidad_medida: i.unidad_medida,
+      cantidad_receta: i.cantidad,
+      stock_actual: i.stock_actual,
+    }));
+  }
+
+  /** true si la linea tiene algun insumo corrido respecto de la receta. */
+  function insumosTocados(it: LineaVenta): boolean {
+    return (it.insumos ?? []).some(
+      (i) => i.cantidad_receta != null && i.cantidad !== i.cantidad_receta
+    );
+  }
+
+  function cambiarInsumo(idx: number, insumoId: string, cantidad: number) {
+    setItems((prev) =>
+      prev.map((it, i) => {
+        if (i !== idx) return it;
+        const base = insumosDeLinea(it);
+        if (!base) return it;
+        // Ajustar insumos no cambia el precio: lo que se cobra ya esta en la
+        // linea y se edita aparte. Esto corrige lo que sale del deposito.
+        return {
+          ...it,
+          insumos: base.map((x) =>
+            x.insumo_producto_id === insumoId ? { ...x, cantidad } : x
+          ),
+        };
+      })
+    );
+  }
+
+  /** Vuelve a lo que dice la receta. */
+  function restaurarInsumos(idx: number) {
+    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, insumos: null } : it)));
+  }
+
+  function toggleInsumos(clave: string) {
+    setInsumosAbiertos((prev) => {
+      const next = new Set(prev);
+      if (next.has(clave)) next.delete(clave);
+      else next.add(clave);
+      return next;
+    });
+  }
+
+  /** El desglose de un servicio: que lleva y cuanto, corregible. */
+  function filaInsumos(item: LineaVenta, idx: number, insumos: LineaInsumoServicio[]) {
+    return (
+      <tr className="bg-slate-50/70">
+        <td colSpan={8} className="px-3 py-3">
+          <div className="rounded-lg border border-slate-200 bg-white">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-3 py-2">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                Lo que lleva este servicio
+              </p>
+              {insumosTocados(item) && (
+                <button
+                  type="button"
+                  onClick={() => restaurarInsumos(idx)}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-[#3F8E91]"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  Volver a la receta
+                </button>
+              )}
+            </div>
+
+            <ul className="divide-y divide-slate-100">
+              {insumos.map((ins) => {
+                const prodIns = productos.find((p) => p.id === ins.insumo_producto_id);
+                // La receta habla en litros y el aceite se compra por galon: hay
+                // que convertir antes de comparar contra el stock.
+                const enUnidadProd = cantidadEnUnidadDelProducto(
+                  ins.cantidad * item.cantidad,
+                  ins.unidad_medida,
+                  prodIns?.unidad_medida
+                );
+                const stock = ins.stock_actual ?? prodIns?.stock_actual ?? 0;
+                const falta = enUnidadProd != null && enUnidadProd > stock;
+                const cambiado =
+                  ins.cantidad_receta != null && ins.cantidad !== ins.cantidad_receta;
+                return (
+                  <li
+                    key={ins.insumo_producto_id}
+                    className="flex flex-wrap items-center gap-3 px-3 py-2"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-slate-800">{ins.insumo_nombre}</p>
+                      <p className="text-[11px] text-slate-400">
+                        {enUnidadProd != null && prodIns
+                          ? `Sale del stock: ${(Math.round(enUnidadProd * 100) / 100).toLocaleString("es-PY")} ${prodIns.unidad_medida ?? ""} · quedan ${stock}`
+                          : "No se puede convertir la unidad: no descuenta stock"}
+                        {ins.cantidad === 0 && " · no se usa en esta venta"}
+                      </p>
+                    </div>
+
+                    {cambiado && (
+                      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                        receta: {ins.cantidad_receta}
+                      </span>
+                    )}
+                    {falta && (
+                      <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+                        Sin stock suficiente
+                      </span>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={ins.cantidad}
+                        onChange={(e) =>
+                          cambiarInsumo(
+                            idx,
+                            ins.insumo_producto_id,
+                            Math.max(0, Number(e.target.value) || 0)
+                          )
+                        }
+                        className="h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-right text-sm tabular-nums"
+                        aria-label={`Cantidad de ${ins.insumo_nombre}`}
+                      />
+                      <span className="w-14 text-[11px] font-semibold uppercase text-slate-500">
+                        {ins.unidad_medida ?? ""}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+
+            <p className="border-t border-slate-100 px-3 py-2 text-[11px] leading-relaxed text-slate-400">
+              Es por cada servicio de esta línea. Cambiar estas cantidades corrige lo que sale
+              del depósito, no lo que se le cobra al cliente.
+            </p>
+          </div>
+        </td>
+      </tr>
+    );
+  }
+
   function filaItem(item: LineaVenta, idx: number) {
                   const prod = productos.find((p) => p.id === item.producto_id);
                   const controla = prod ? prod.controla_stock !== false : true;
                   const stock = prod?.stock_actual ?? 0;
                   const stockBajo = controla && item.cantidad > stock;
+                  const insumos = insumosDeLinea(item);
+                  const clave = claveLinea(item);
+                  const abierto = insumos != null && insumosAbiertos.has(clave);
+                  // La key sigue siendo el indice, como antes; `clave` solo
+                  // recuerda que desgloses quedaron abiertos.
                   return (
-                    <tr key={idx} className="align-middle transition-colors hover:bg-[#0EA5E9]/5">
+                    <Fragment key={idx}>
+                    <tr className="align-middle transition-colors hover:bg-[#0EA5E9]/5">
                       {/* Producto + SKU */}
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-3">
@@ -1138,6 +1322,21 @@ export default function NuevaVentaPage() {
                                 {item.presentacion_cantidad_base != null && item.presentacion_cantidad_base !== 1
                                   ? ` = ${item.cantidad * item.presentacion_cantidad_base}` : ""}
                               </p>
+                            )}
+                            {insumos && (
+                              <button
+                                type="button"
+                                onClick={() => toggleInsumos(clave)}
+                                className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-[#3F8E91] hover:underline"
+                              >
+                                {abierto ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                {abierto ? "Ocultar" : "Ver"} lo que lleva ({insumos.length})
+                                {insumosTocados(item) && (
+                                  <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                                    ajustado
+                                  </span>
+                                )}
+                              </button>
                             )}
                           </div>
                         </div>
@@ -1220,6 +1419,8 @@ export default function NuevaVentaPage() {
                         </button>
                       </td>
                     </tr>
+                    {abierto && insumos && filaInsumos(item, idx, insumos)}
+                    </Fragment>
     );
   }
 

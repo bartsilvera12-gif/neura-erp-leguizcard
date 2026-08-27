@@ -8,6 +8,25 @@ import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import type { Venta, LineaVenta } from "@/lib/ventas/types";
 
+/**
+ * Ajustes de insumos de una linea de servicio. Se queda con lo que tiene forma
+ * de ajuste y descarta el resto: un ajuste mal formado no puede tumbar la venta
+ * entera, y sin ajuste manda la receta, que es el comportamiento de siempre.
+ */
+function asInsumos(raw: unknown): { insumo_producto_id: string; cantidad: number }[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const out: { insumo_producto_id: string; cantidad: number }[] = [];
+  for (const x of raw) {
+    if (!x || typeof x !== "object") continue;
+    const r = x as Record<string, unknown>;
+    const id = String(r.insumo_producto_id ?? "");
+    const cant = Number(r.cantidad);
+    if (!id || !Number.isFinite(cant) || cant < 0) continue;
+    out.push({ insumo_producto_id: id, cantidad: cant });
+  }
+  return out.length ? out : null;
+}
+
 function asItems(body: unknown): CreateVentaItemInput[] | null {
   if (!body || typeof body !== "object") return null;
   const raw = (body as { items?: unknown }).items;
@@ -32,6 +51,7 @@ function asItems(body: unknown): CreateVentaItemInput[] | null {
       subtotal: Number(r.subtotal),
       monto_iva: Number(r.monto_iva),
       total_linea: Number(r.total_linea),
+      insumos: asInsumos(r.insumos),
     });
   }
   if (out.some((i) => !(i.cantidad > 0))) return null;

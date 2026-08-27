@@ -19,6 +19,11 @@ export interface CreateVentaItemInput {
   subtotal: number;
   monto_iva: number;
   total_linea: number;
+  /**
+   * Insumos ajustados para ESTA linea de servicio: pisan la cantidad de la
+   * receta. Cantidad 0 = ese insumo no se uso. Sin ajustes, manda la receta.
+   */
+  insumos?: { insumo_producto_id: string; cantidad: number }[] | null;
 }
 
 export interface CreateVentaPedidoCocinaInput {
@@ -432,6 +437,10 @@ interface ConsumoServicio {
  * que usan el mismo aceite, tiene que salir UN descuento por la suma y no dos
  * updates pisandose.
  *
+ * Se recorre LINEA por linea, no producto por producto: cada linea puede traer
+ * sus propios ajustes de insumos (a esta camioneta le entraron 4 L, a la otra
+ * 3,7), y sumarlas antes de explotar las mezclaria.
+ *
  * Los insumos que no controlan stock se ignoran, igual que en una venta directa.
  */
 async function explotarServicios(
@@ -454,22 +463,33 @@ async function explotarServicios(
   if (!recetas.length) return [];
 
   const acumulado = new Map<string, { cantidad: number; servicios: Set<string> }>();
+  const recetaDe = new Map(recetas.map((r) => [r.producto_id, r.id]));
 
-  for (const r of recetas) {
-    const veces = items
-      .filter((i) => i.producto_id === r.producto_id)
-      .reduce((s, i) => s + i.cantidad, 0);
-    if (veces <= 0) continue;
+  for (const linea of items) {
+    const recetaId = recetaDe.get(linea.producto_id);
+    if (!recetaId || linea.cantidad <= 0) continue;
 
-    const expQ = await sb.rpc("fn_receta_explosion", { p_receta_id: r.id, p_veces: veces });
+    // Los ajustes se mandan tal cual: la conversion de unidades y la merma las
+    // resuelve la funcion, con la receta como referencia.
+    const ajustes = (linea.insumos ?? [])
+      .filter((x) => x && x.insumo_producto_id && Number.isFinite(x.cantidad) && x.cantidad >= 0)
+      .map((x) => ({ insumo_producto_id: x.insumo_producto_id, cantidad: x.cantidad }));
+
+    // Sin ajustes se llama con dos argumentos: asi la venta normal sigue
+    // andando aunque la migracion 0018 todavia no este aplicada.
+    const expQ = await sb.rpc(
+      "fn_receta_explosion",
+      ajustes.length
+        ? { p_receta_id: recetaId, p_veces: linea.cantidad, p_ajustes: ajustes }
+        : { p_receta_id: recetaId, p_veces: linea.cantidad }
+    );
     if (expQ.error) throw new Error(expQ.error.message);
     const filas = (expQ.data ?? []) as unknown as {
       insumo_producto_id: string;
       cantidad_efectiva: number | string;
     }[];
 
-    const nombreServicio =
-      items.find((i) => i.producto_id === r.producto_id)?.producto_nombre ?? "servicio";
+    const nombreServicio = linea.producto_nombre || "servicio";
 
     for (const f of filas) {
       const id = String(f.insumo_producto_id);

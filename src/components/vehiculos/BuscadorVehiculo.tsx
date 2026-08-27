@@ -14,7 +14,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { Camera, Car, Loader2, Plus, Search, X } from "lucide-react";
+import { Camera, Car, Droplet, Loader2, Plus, Search, X } from "lucide-react";
+import { FancySelect } from "@/components/ui/FancySelect";
 import { buscarVehiculos, normalizar } from "@/lib/vehiculos/buscar";
 import { crearVehiculo, subirImagenVehiculo } from "@/lib/vehiculos/storage";
 import {
@@ -234,7 +235,9 @@ export default function BuscadorVehiculo({
   }
 
   const INPUT =
-    "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-[#4FAEB2]";
+    "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition-all placeholder:text-slate-300 hover:border-[#4FAEB2]/60 focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20";
+  const LABEL = "mb-1 block text-[11px] font-medium uppercase tracking-wide text-slate-500";
+  const SECCION = "mb-3 border-b border-slate-100 pb-1.5 text-xs font-semibold text-slate-700";
 
   return (
     <div
@@ -243,7 +246,7 @@ export default function BuscadorVehiculo({
       role="presentation"
     >
       <div
-        className="flex max-h-[80vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+        className={`flex max-h-[86vh] w-full flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all ${alta ? "max-w-3xl" : "max-w-xl"}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -264,180 +267,215 @@ export default function BuscadorVehiculo({
 
         {alta ? (
           /* ── Alta: la ficha completa, sin salir de la venta ──────────────
-              El "lo completo después" en la practica es nunca, y el auto queda
+              El "lo completo despues" en la practica es nunca, y el auto queda
               sin aceite ni odometro — que es justo lo que el seguimiento de
-              mantenimiento necesita para servir de algo. */
-          <div className="min-h-0 flex-1 overflow-y-auto p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-semibold text-slate-700">Vehículo nuevo</p>
-              <span className="text-[11px] text-slate-400">Solo la patente es obligatoria</span>
-            </div>
+              mantenimiento necesita para servir de algo.
 
-            <div className="flex flex-col gap-4 sm:flex-row">
-              {/* Foto: se sube apenas se crea el auto. */}
-              <div className="w-full shrink-0 sm:w-40">
-                <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-                  {fotoPreview ? (
-                    <>
-                      {/* Preview local (blob), no pasa por el optimizador. */}
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={fotoPreview} alt="Foto elegida" className="h-full w-full object-cover" />
+              Cada campo lleva su etiqueta arriba y no solo un placeholder: el
+              placeholder desaparece al escribir, y despues nadie sabe que era
+              ese dato. */
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="space-y-6 p-5 sm:p-6">
+              {/* ── Identificación ─────────────────────────────────────── */}
+              <div className="flex flex-col gap-5 sm:flex-row">
+                {/* Foto: se sube apenas se crea el auto. */}
+                <div className="w-full shrink-0 sm:w-44">
+                  <div
+                    className={`relative aspect-[4/3] w-full overflow-hidden rounded-2xl transition-colors ${
+                      fotoPreview
+                        ? "border border-slate-200"
+                        : "border-2 border-dashed border-slate-200 bg-slate-50/60 hover:border-[#4FAEB2]/60 hover:bg-[#4FAEB2]/[0.04]"
+                    }`}
+                  >
+                    {fotoPreview ? (
+                      <>
+                        {/* Preview local (blob): no pasa por el optimizador. */}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={fotoPreview} alt="Foto elegida" className="h-full w-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFoto(null);
+                            setFotoPreview(null);
+                          }}
+                          className="absolute right-1.5 top-1.5 rounded-full bg-white/90 p-1.5 text-slate-500 shadow-sm transition-colors hover:text-red-600"
+                          aria-label="Quitar foto"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </>
+                    ) : (
                       <button
                         type="button"
-                        onClick={() => {
-                          setFoto(null);
-                          setFotoPreview(null);
-                        }}
-                        className="absolute right-1 top-1 rounded-full bg-white/90 p-1 text-slate-500 shadow hover:text-red-600"
-                        aria-label="Quitar foto"
+                        onClick={() => fotoRef.current?.click()}
+                        className="flex h-full w-full flex-col items-center justify-center gap-2 text-slate-400 transition-colors hover:text-[#3F8E91]"
                       >
-                        <X className="h-3.5 w-3.5" />
+                        <Camera className="h-7 w-7" strokeWidth={1.5} />
+                        <span className="text-xs font-medium">Agregar foto</span>
+                        <span className="text-[10px] text-slate-400">Opcional</span>
                       </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => fotoRef.current?.click()}
-                      className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-[#3F8E91]"
-                    >
-                      <Camera className="h-6 w-6" />
-                      <span className="text-[11px] font-medium">Foto (opcional)</span>
-                    </button>
-                  )}
+                    )}
+                  </div>
+                  <input
+                    ref={fotoRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={elegirFoto}
+                    className="hidden"
+                  />
                 </div>
-                <input
-                  ref={fotoRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={elegirFoto}
-                  className="hidden"
+
+                <div className="flex-1 space-y-4">
+                  <div>
+                    <label className={LABEL} htmlFor="alta-patente">
+                      Patente <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="alta-patente"
+                      autoFocus
+                      value={alta.patente}
+                      onChange={(e) => setAlta({ ...alta, patente: e.target.value.toUpperCase() })}
+                      placeholder="ABC 123"
+                      className={`${INPUT} h-12 font-mono text-lg font-bold uppercase tracking-widest`}
+                    />
+                  </div>
+                  <div>
+                    <label className={LABEL}>Cliente</label>
+                    <FancySelect
+                      options={[
+                        { value: "", label: "Sin cliente", description: "Se le puede asignar después" },
+                        ...clientes.map((c) => ({ value: c.id, label: c.label })),
+                      ]}
+                      value={alta.cliente_id}
+                      onChange={(v) => setAlta({ ...alta, cliente_id: v })}
+                      ariaLabel="Cliente del vehículo"
+                      placeholder="Sin cliente"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* ── El vehículo ────────────────────────────────────────── */}
+              <div>
+                <p className={SECCION}>El vehículo</p>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  <div>
+                    <label className={LABEL} htmlFor="alta-marca">Marca</label>
+                    <input id="alta-marca" value={alta.marca} onChange={(e) => setAlta({ ...alta, marca: e.target.value })} placeholder="Toyota" className={INPUT} />
+                  </div>
+                  <div>
+                    <label className={LABEL} htmlFor="alta-modelo">Modelo</label>
+                    <input id="alta-modelo" value={alta.modelo} onChange={(e) => setAlta({ ...alta, modelo: e.target.value })} placeholder="Hilux" className={INPUT} />
+                  </div>
+                  <div>
+                    <label className={LABEL} htmlFor="alta-anio">Año</label>
+                    <input id="alta-anio" type="number" min={1900} max={2200} value={alta.anio} onChange={(e) => setAlta({ ...alta, anio: e.target.value })} placeholder="2019" className={`${INPUT} tabular-nums`} />
+                  </div>
+                  <div>
+                    <label className={LABEL} htmlFor="alta-motor">Motor</label>
+                    <input id="alta-motor" value={alta.motor} onChange={(e) => setAlta({ ...alta, motor: e.target.value })} placeholder="2.8 TDI" className={INPUT} />
+                  </div>
+                  <div>
+                    <label className={LABEL}>Combustible</label>
+                    <FancySelect
+                      options={[
+                        { value: "", label: "Sin especificar" },
+                        ...COMBUSTIBLES.map((x) => ({ value: x, label: COMBUSTIBLE_LABEL[x] })),
+                      ]}
+                      value={alta.combustible}
+                      onChange={(v) => setAlta({ ...alta, combustible: v as Combustible | "" })}
+                      ariaLabel="Combustible"
+                      placeholder="Sin especificar"
+                    />
+                  </div>
+                  <div>
+                    <label className={LABEL} htmlFor="alta-color">Color</label>
+                    <input id="alta-color" value={alta.color} onChange={(e) => setAlta({ ...alta, color: e.target.value })} placeholder="Blanco" className={INPUT} />
+                  </div>
+                  <div className="col-span-2">
+                    <label className={LABEL} htmlFor="alta-vin">Chasis / VIN</label>
+                    <input id="alta-vin" value={alta.vin} onChange={(e) => setAlta({ ...alta, vin: e.target.value })} className={`${INPUT} font-mono`} />
+                  </div>
+                  <div>
+                    <label className={LABEL} htmlFor="alta-km">Km actual</label>
+                    <input id="alta-km" type="number" min={0} value={alta.km_actual} onChange={(e) => setAlta({ ...alta, km_actual: e.target.value })} placeholder="85000" className={`${INPUT} tabular-nums`} />
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Aceite ─────────────────────────────────────────────────
+                  Se destaca porque es el dato que el mecanico pregunta apenas
+                  el auto entra. */}
+              <div className="rounded-2xl border border-[#4FAEB2]/30 bg-[#4FAEB2]/[0.05] p-4">
+                <div className="mb-3 flex items-start gap-2">
+                  <Droplet className="mt-0.5 h-4 w-4 shrink-0 text-[#4FAEB2]" />
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">Aceite que usa</p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      La especificación que pide el vehículo, no una marca puntual.
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="sm:col-span-2">
+                    <label className={LABEL} htmlFor="alta-aceite">Tipo</label>
+                    <input
+                      id="alta-aceite"
+                      value={alta.aceite_tipo}
+                      onChange={(e) => setAlta({ ...alta, aceite_tipo: e.target.value })}
+                      placeholder="15W40 semisintético"
+                      className={INPUT}
+                    />
+                  </div>
+                  <div>
+                    <label className={LABEL} htmlFor="alta-litros">Litros</label>
+                    <input
+                      id="alta-litros"
+                      type="number"
+                      min={0}
+                      step="0.1"
+                      value={alta.aceite_litros}
+                      onChange={(e) => setAlta({ ...alta, aceite_litros: e.target.value })}
+                      placeholder="7.5"
+                      className={`${INPUT} tabular-nums`}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Observaciones ──────────────────────────────────────── */}
+              <div>
+                <label className={LABEL} htmlFor="alta-obs">Observaciones</label>
+                <textarea
+                  id="alta-obs"
+                  value={alta.observaciones}
+                  onChange={(e) => setAlta({ ...alta, observaciones: e.target.value })}
+                  rows={2}
+                  placeholder="Algo para recordar la próxima vez"
+                  className={INPUT}
                 />
               </div>
 
-              <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-3">
-                <input
-                  autoFocus
-                  value={alta.patente}
-                  onChange={(e) => setAlta({ ...alta, patente: e.target.value.toUpperCase() })}
-                  placeholder="Patente *"
-                  className={`${INPUT} col-span-2 font-mono font-semibold uppercase sm:col-span-1`}
-                />
-                <select
-                  value={alta.cliente_id}
-                  onChange={(e) => setAlta({ ...alta, cliente_id: e.target.value })}
-                  className={`${INPUT} col-span-2`}
-                >
-                  <option value="">Sin cliente</option>
-                  {clientes.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
-
-                <input
-                  value={alta.marca}
-                  onChange={(e) => setAlta({ ...alta, marca: e.target.value })}
-                  placeholder="Marca"
-                  className={INPUT}
-                />
-                <input
-                  value={alta.modelo}
-                  onChange={(e) => setAlta({ ...alta, modelo: e.target.value })}
-                  placeholder="Modelo"
-                  className={INPUT}
-                />
-                <input
-                  type="number"
-                  min={1900}
-                  max={2200}
-                  value={alta.anio}
-                  onChange={(e) => setAlta({ ...alta, anio: e.target.value })}
-                  placeholder="Año"
-                  className={INPUT}
-                />
-
-                <input
-                  value={alta.motor}
-                  onChange={(e) => setAlta({ ...alta, motor: e.target.value })}
-                  placeholder="Motor"
-                  className={INPUT}
-                />
-                <select
-                  value={alta.combustible}
-                  onChange={(e) => setAlta({ ...alta, combustible: e.target.value as Combustible | "" })}
-                  className={INPUT}
-                >
-                  <option value="">Combustible</option>
-                  {COMBUSTIBLES.map((c) => (
-                    <option key={c} value={c}>
-                      {COMBUSTIBLE_LABEL[c]}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  value={alta.color}
-                  onChange={(e) => setAlta({ ...alta, color: e.target.value })}
-                  placeholder="Color"
-                  className={INPUT}
-                />
-
-                <input
-                  value={alta.vin}
-                  onChange={(e) => setAlta({ ...alta, vin: e.target.value })}
-                  placeholder="Chasis / VIN"
-                  className={`${INPUT} col-span-2 font-mono`}
-                />
-                <input
-                  type="number"
-                  min={0}
-                  value={alta.km_actual}
-                  onChange={(e) => setAlta({ ...alta, km_actual: e.target.value })}
-                  placeholder="Km actual"
-                  className={INPUT}
-                />
-              </div>
+              {error && (
+                <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {error}
+                </p>
+              )}
+              {aviso && (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  {aviso}
+                </p>
+              )}
             </div>
 
-            {/* Aceite: separado porque es el dato que dispara el mantenimiento. */}
-            <div className="mt-3 rounded-xl border border-[#4FAEB2]/30 bg-[#4FAEB2]/5 p-3">
-              <p className="mb-2 text-xs font-semibold text-slate-700">Aceite que usa</p>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <input
-                  value={alta.aceite_tipo}
-                  onChange={(e) => setAlta({ ...alta, aceite_tipo: e.target.value })}
-                  placeholder="Ej: 15W40 semisintético"
-                  className={INPUT}
-                />
-                <input
-                  type="number"
-                  min={0}
-                  step="0.1"
-                  value={alta.aceite_litros}
-                  onChange={(e) => setAlta({ ...alta, aceite_litros: e.target.value })}
-                  placeholder="Litros del cambio"
-                  className={INPUT}
-                />
-              </div>
-            </div>
-
-            <textarea
-              value={alta.observaciones}
-              onChange={(e) => setAlta({ ...alta, observaciones: e.target.value })}
-              rows={2}
-              placeholder="Observaciones"
-              className={`${INPUT} mt-3`}
-            />
-
-            {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
-            {aviso && <p className="mt-2 text-xs text-amber-700">{aviso}</p>}
-
-            <div className="mt-4 flex gap-2">
+            {/* Barra de acciones pegada abajo: con el formulario largo, el boton
+                tiene que estar siempre a mano y no al final del scroll. */}
+            <div className="sticky bottom-0 flex gap-2 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:px-6">
               <button
                 type="button"
                 onClick={guardarNuevo}
                 disabled={creando}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-[#4FAEB2] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#3F8E91] disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-xl bg-[#4FAEB2] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#3F8E91] disabled:opacity-60"
               >
                 {creando && <Loader2 className="h-4 w-4 animate-spin" />}
                 Guardar y usar
@@ -449,7 +487,7 @@ export default function BuscadorVehiculo({
                   setError(null);
                   setAviso(null);
                 }}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
+                className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
               >
                 Volver
               </button>

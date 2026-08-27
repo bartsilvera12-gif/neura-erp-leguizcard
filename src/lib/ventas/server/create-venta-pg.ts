@@ -54,6 +54,11 @@ export interface CreateVentaPgParams {
   createdBy?: string | null;
   usuarioNombre?: string | null;
   /**
+   * Caja abierta donde entra el cobro. NULL = la venta no pasa por caja, y
+   * entonces no aparece en el arqueo del turno.
+   */
+  cajaId?: string | null;
+  /**
    * Lubricentro: vehiculos atendidos en esta venta, cada uno con su odometro.
    * Una venta puede cubrir varios autos (un cliente con flota) y cada linea se
    * atribuye al suyo.
@@ -201,6 +206,12 @@ export async function createVentaTransaccionalPg(
       metodo_pago: params.metodoPago,
       fecha: fechaIso,
       observaciones: params.observaciones,
+      // Sin esto la venta no entra al arqueo del turno: el reporte de cajas
+      // cruza por caja_id y una venta con caja_id nulo no existe para el.
+      caja_id: params.cajaId ?? null,
+      // Quien la registro. Los reportes muestran esta columna como "cajero".
+      created_by: params.createdBy ?? null,
+      usuario_nombre: params.usuarioNombre ?? null,
       // El vehiculo y el odometro viven en ventas_vehiculos: una venta puede
       // tener varios, y el kilometraje es propio de cada auto.
     })

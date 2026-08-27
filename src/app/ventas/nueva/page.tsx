@@ -608,8 +608,55 @@ export default function NuevaVentaPage() {
     return () => { if (comboTimerRef.current) clearTimeout(comboTimerRef.current); };
   }, [comboQuery]);
 
-  // Esta instancia no usa el módulo Caja: no se consulta el estado de cajas y
-  // la venta no depende de tener una caja abierta.
+  /**
+   * Cajas abiertas.
+   *
+   * Estaba apagado ("esta instancia no usa el modulo Caja") y por eso ninguna
+   * venta quedaba asociada a un turno: el arqueo salia siempre vacio aunque
+   * hubiera una caja abierta. Se vuelve a consultar.
+   *
+   * Si NO hay ninguna abierta, la venta se registra igual, sin caja. Trabar el
+   * mostrador porque nadie abrio la caja seria peor que un arqueo incompleto.
+   */
+  useEffect(() => {
+    let cancelado = false;
+
+    async function cargarCajas() {
+      try {
+        const r = await fetchWithSupabaseSession("/api/caja/estado", { cache: "no-store" });
+        const j = await r.json();
+        if (cancelado || !r.ok || !j?.success) return;
+        type CajaResumen = { caja: { id: string; numero_caja: number; estado: string } };
+        const abiertas = ((j.data?.cajas ?? []) as CajaResumen[])
+          .filter((c) => c.caja?.estado === "abierta")
+          .map((c) => ({ id: c.caja.id, numero_caja: Number(c.caja.numero_caja) || 1 }));
+        setCajasAbiertas(abiertas);
+
+        // La ultima elegida en este navegador, si sigue abierta. Si no, y hay
+        // una sola, esa. El cajero no deberia tener que elegir todos los dias.
+        setCajaActivaId((actual) => {
+          if (actual && abiertas.some((c) => c.id === actual)) return actual;
+          let guardada = "";
+          try { guardada = localStorage.getItem("caja_activa_id") ?? ""; } catch { /* noop */ }
+          if (guardada && abiertas.some((c) => c.id === guardada)) return guardada;
+          return abiertas.length === 1 ? abiertas[0].id : "";
+        });
+      } catch {
+        // Sin estado de caja la venta sigue andando, solo que sin turno.
+      }
+    }
+
+    void cargarCajas();
+    // Al volver a la pestaña: pudieron abrir o cerrar la caja desde otra pantalla.
+    const alVolver = () => {
+      if (document.visibilityState === "visible") void cargarCajas();
+    };
+    document.addEventListener("visibilitychange", alVolver);
+    return () => {
+      cancelado = true;
+      document.removeEventListener("visibilitychange", alVolver);
+    };
+  }, []);
 
   // Persistir la caja activa elegida (por navegador del cajero).
   useEffect(() => {

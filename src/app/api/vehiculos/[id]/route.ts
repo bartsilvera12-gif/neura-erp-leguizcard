@@ -180,7 +180,14 @@ export async function PATCH(request: NextRequest, ctxParams: { params: Promise<{
 
     const actualizado = await updateVehiculo(schema, ctx.auth.empresa_id, id, patch);
     if (!actualizado) return NextResponse.json(errorResponse("Vehículo no encontrado."), { status: 404 });
-    return NextResponse.json(successResponse({ vehiculo: mapVehiculoRow(actualizado) }));
+    // La foto se firma tambien al responder un PATCH. mapVehiculoRow() deja
+    // imagen_url en null a proposito (firmar es tarea de quien llama), asi que
+    // sin esto la pantalla que reemplaza la fila con la respuesta se queda sin
+    // foto hasta recargar: es lo que pasaba al vincular un vehiculo a un cliente.
+    const imagenUrl = await signVehiculoImagen(ctx.supabase, actualizado.imagen_path);
+    return NextResponse.json(
+      successResponse({ vehiculo: { ...mapVehiculoRow(actualizado), imagen_url: imagenUrl } })
+    );
   } catch (err) {
     const msg = err instanceof Error ? err.message : "";
     if (/ux_vehiculos_empresa_patente|duplicate key/i.test(msg)) {

@@ -83,14 +83,17 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 type TabId = "informacion" | "vehiculos" | "estado_cuenta" | "suscripciones" | "marketing" | "proyectos" | "actividad" | "notas";
 
+// Suscripciones, Proyectos y Actividad OCULTAS (pedido del negocio: no las usa
+// un lubricentro). Se saca la pestaña, no el contenido: el panel de cada una y
+// sus modales siguen abajo, y volver a listarla acá las devuelve.
 const TABS: { id: TabId; label: string; showWhen?: (c: Cliente) => boolean }[] = [
   { id: "informacion",   label: "Información"      },
   { id: "vehiculos",     label: "Vehículos"        },
   { id: "estado_cuenta", label: "Estado de cuenta" },
-  { id: "suscripciones", label: "Suscripciones"    },
+  // { id: "suscripciones", label: "Suscripciones"    },
   { id: "marketing",     label: "Marketing",        showWhen: (c) => c.tipo_servicio_cliente === "marketing" },
-  { id: "proyectos",     label: "Proyectos"         },
-  { id: "actividad",     label: "Actividad"         },
+  // { id: "proyectos",     label: "Proyectos"         },
+  // { id: "actividad",     label: "Actividad"         },
   { id: "notas",         label: "Notas"             },
 ];
 
@@ -1030,24 +1033,8 @@ export default function ClienteDetailPage() {
             </div>
           </div>
           <div className="mt-4 pt-4 border-t border-white/15 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setFormSusc({
-                  plan_id: "",
-                  precio: "",
-                  fecha_inicio: new Date().toISOString().slice(0, 10),
-                  duracion_meses: "12",
-                  dia_facturacion: "1",
-                  dia_vencimiento: "10",
-                  generar_factura_este_mes: false,
-                });
-                setModalSuscripcion(true);
-              }}
-              className="text-xs font-medium bg-white/15 hover:bg-white/25 text-white border border-white/30 px-3 py-1.5 rounded-lg transition-colors"
-            >
-              Nueva suscripción
-            </button>
+            {/* "Nueva suscripción" OCULTO junto con su pestaña. El modal sigue
+                armado; para reactivarlo, descomentar este botón. */}
             <button
               type="button"
               onClick={() => {

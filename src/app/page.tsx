@@ -2177,8 +2177,11 @@ export default function DashboardPage() {
   const mapNombreTipoServicio = useMapNombreTipoServicioCatalogo(clientes);
   const nivel = usuarioActivo?.nivel ?? "administrador";
 
-  // Instancia Leguizcard: solo Ventas / Inventario / Financiero (sin Comercial/CRM/Pipeline).
-  const MARI_ALLOWED_TABS: TabDash[] = ["ventas", "inventario", "financiero"];
+  // Instancia Leguizcard: solo Ventas e Inventario (sin Comercial/CRM/Pipeline).
+  // "financiero" OCULTO (pedido del negocio). Para reactivarlo, volver a
+  // sumarlo a esta lista: el tablero sigue armado, solo no se ofrece.
+  // Quien tenga guardado ?tab=financiero cae en Ventas, por el efecto de abajo.
+  const MARI_ALLOWED_TABS: TabDash[] = ["ventas", "inventario"];
   const rawTabs: TabDash[] = dashScope.kind === "scoped" ? dashScope.tabs : TAB_VALID;
   const effectiveTabs: TabDash[] = rawTabs.filter((t) => MARI_ALLOWED_TABS.includes(t));
   const showTabNav = effectiveTabs.length > 1;

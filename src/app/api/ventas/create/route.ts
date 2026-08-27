@@ -263,6 +263,7 @@ export async function POST(request: NextRequest) {
       // Auditoría de stock: todo movimiento queda con el usuario que lo generó.
       createdBy: auth.usuarioCatalogId ?? auth.user?.id ?? null,
       usuarioNombre: authRol?.nombre?.trim() || auth.user?.email || null,
+      cajaId: typeof o.caja_id === "string" && o.caja_id.trim() ? o.caja_id.trim() : null,
       vehiculos,
     });
 

@@ -27,13 +27,13 @@ import {
   // ScrollText, -- lo usa el item Notas de crédito, hoy oculto
   Search,
   SendHorizontal,
-  Settings,
+  // Settings, -- lo usa el item Configuración, hoy oculto
   ShoppingCart,
   Sparkles,
   Star,
   Ticket,
   // Truck, -- lo usa el item Remisión, hoy oculto
-  UserCog,
+  // UserCog, -- lo usa el item Usuarios, hoy oculto
   Users,
   Utensils,
   // Wallet, -- lo usa el item Pagos, hoy oculto
@@ -212,18 +212,29 @@ const MENU_STRUCTURE: MenuItem[] = [
     ],
   },
   // Sistema: el acceso lo decide empresa_modulos; si el módulo no está habilitado, no se muestra.
-  { key: "usuarios", slug: "usuarios", label: "Usuarios", href: "/usuarios", icon: UserCog },
-  {
-    key: "configuracion",
-    slug: "configuracion",
-    label: "Configuración",
-    href: "/configuracion",
-    icon: Settings,
-    children: [
-      { label: "Facturación", href: "/configuracion/facturacion" },
-      { label: "Equipos y supervisión", href: "/configuracion/omnicanal-equipos" },
-    ],
-  },
+  //
+  // Usuarios y Configuración OCULTOS de la interfaz (pedido del negocio). Con
+  // esto la familia "Administración" queda vacia y no se dibuja.
+  //
+  // OJO: son las dos puertas de entrada a la administracion del sistema.
+  // Usuarios es el unico lugar donde se da de alta a alguien del mostrador, y
+  // Configuración > Facturación es donde se cargan RUC y timbrado, que todavia
+  // estan vacios. Las pantallas siguen respondiendo por URL.
+  //
+  // Para reactivar: descomentar esto, los imports de `UserCog` y `Settings` y
+  // las keys en MENU_FAMILIES.
+  // { key: "usuarios", slug: "usuarios", label: "Usuarios", href: "/usuarios", icon: UserCog },
+  // {
+  //   key: "configuracion",
+  //   slug: "configuracion",
+  //   label: "Configuración",
+  //   href: "/configuracion",
+  //   icon: Settings,
+  //   children: [
+  //     { label: "Facturación", href: "/configuracion/facturacion" },
+  //     { label: "Equipos y supervisión", href: "/configuracion/omnicanal-equipos" },
+  //   ],
+  // },
 ];
 
 /**
@@ -237,7 +248,9 @@ const MENU_FAMILIES: { id: string; titulo: string; keys: string[] }[] = [
   { id: "finanzas", titulo: "Finanzas", keys: ["gastos", "comisiones", "reportes"] },
   { id: "operaciones", titulo: "Operaciones", keys: ["inventario", "servicios", "compras"] },
   { id: "omnicanal", titulo: "Omnicanal", keys: ["conversaciones"] },
-  { id: "administracion", titulo: "Administración", keys: ["usuarios", "configuracion"] },
+  // Administración queda vacia al ocultar Usuarios y Configuración: una familia
+  // sin items no se dibuja, asi que la seccion entera desaparece sola.
+  { id: "administracion", titulo: "Administración", keys: [] },
 ];
 
 function modulosSyntheticFromMenu(): ModuloEmpresa[] {

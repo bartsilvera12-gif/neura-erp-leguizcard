@@ -1985,6 +1985,8 @@ export default function NuevaVentaPage() {
           onElegir={agregarVehiculo}
           onCreado={(v) => setVehiculos((prev) => [v, ...prev.filter((x) => x.id !== v.id)])}
           onCerrar={() => setBuscadorVehAbierto(false)}
+          clientes={clientes.map((c) => ({ id: c.id, label: c.label }))}
+          clienteIdVenta={clienteId}
         />
       )}
 

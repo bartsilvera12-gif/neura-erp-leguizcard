@@ -14,10 +14,15 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { Car, Loader2, Plus, Search } from "lucide-react";
+import { Camera, Car, Loader2, Plus, Search, X } from "lucide-react";
 import { buscarVehiculos, normalizar } from "@/lib/vehiculos/buscar";
-import { crearVehiculo } from "@/lib/vehiculos/storage";
-import type { Vehiculo } from "@/lib/vehiculos/types";
+import { crearVehiculo, subirImagenVehiculo } from "@/lib/vehiculos/storage";
+import {
+  COMBUSTIBLES,
+  COMBUSTIBLE_LABEL,
+  type Combustible,
+  type Vehiculo,
+} from "@/lib/vehiculos/types";
 
 const miles = (v: number) => Math.round(v).toLocaleString("es-PY");
 
@@ -36,12 +41,48 @@ function haceCuanto(iso: string | null | undefined): string | null {
   return `hace ${anios} ${anios === 1 ? "año" : "años"}`;
 }
 
+interface FormAlta {
+  patente: string;
+  cliente_id: string;
+  marca: string;
+  modelo: string;
+  anio: string;
+  motor: string;
+  combustible: Combustible | "";
+  color: string;
+  vin: string;
+  km_actual: string;
+  aceite_tipo: string;
+  aceite_litros: string;
+  observaciones: string;
+}
+
+function formVacio(patente: string, clienteId: string): FormAlta {
+  return {
+    patente,
+    cliente_id: clienteId,
+    marca: "",
+    modelo: "",
+    anio: "",
+    motor: "",
+    combustible: "",
+    color: "",
+    vin: "",
+    km_actual: "",
+    aceite_tipo: "",
+    aceite_litros: "",
+    observaciones: "",
+  };
+}
+
 export default function BuscadorVehiculo({
   vehiculos,
   excluir,
   onElegir,
   onCreado,
   onCerrar,
+  clientes = [],
+  clienteIdVenta = "",
 }: {
   vehiculos: Vehiculo[];
   /** Ids ya cargados en la venta: no tiene sentido ofrecerlos de nuevo. */
@@ -50,9 +91,24 @@ export default function BuscadorVehiculo({
   /** Un auto recien creado hay que sumarlo a la lista de la pantalla. */
   onCreado: (v: Vehiculo) => void;
   onCerrar: () => void;
+  /** Clientes de la venta, para poder asignarle dueno al auto nuevo. */
+  clientes?: { id: string; label: string }[];
+  /** Cliente ya elegido en la venta: se propone como dueno del auto nuevo. */
+  clienteIdVenta?: string;
 }) {
   const [q, setQ] = useState("");
-  const [alta, setAlta] = useState<{ patente: string; marca: string; modelo: string } | null>(null);
+  /**
+   * La ficha completa se carga aca mismo. Antes solo se pedia patente, marca y
+   * modelo y el resto quedaba para despues: en la practica "despues" es nunca,
+   * y el auto termina sin el aceite ni el odometro, que es justo lo que el
+   * seguimiento de mantenimiento necesita.
+   */
+  const [alta, setAlta] = useState<FormAlta | null>(null);
+  /** La foto se sube DESPUES de crear: recien ahi existe el id que la nombra. */
+  const [foto, setFoto] = useState<File | null>(null);
+  const [fotoPreview, setFotoPreview] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+  const fotoRef = useRef<HTMLInputElement>(null);
   const [creando, setCreando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resaltado, setResaltado] = useState(0);
@@ -88,8 +144,34 @@ export default function BuscadorVehiculo({
       e.preventDefault();
       const r = resultados[resaltado];
       if (r) onElegir(r.vehiculo);
-      else if (q.trim()) setAlta({ patente: q.trim().toUpperCase(), marca: "", modelo: "" });
+      else if (q.trim()) abrirAlta();
     }
+  }
+
+  function abrirAlta() {
+    setAlta(formVacio(q.trim().toUpperCase(), clienteIdVenta));
+    setFoto(null);
+    setFotoPreview(null);
+    setError(null);
+    setAviso(null);
+  }
+
+  function elegirFoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    // Se limpia siempre: sin esto, elegir el mismo archivo dos veces seguidas
+    // no dispara onChange y parece que no pasa nada.
+    e.target.value = "";
+    if (!file) return;
+    setFoto(file);
+    setFotoPreview(URL.createObjectURL(file));
+  }
+
+  /** Numero del formulario, o null si esta vacio o no es valido. */
+  function num(v: string): number | null {
+    const t = v.trim();
+    if (t === "") return null;
+    const n = Number(t);
+    return Number.isFinite(n) ? n : null;
   }
 
   async function guardarNuevo() {
@@ -98,20 +180,57 @@ export default function BuscadorVehiculo({
       setError("La patente es muy corta.");
       return;
     }
+    const anio = num(alta.anio);
+    if (anio != null && (anio < 1900 || anio > 2200)) {
+      setError("Año inválido.");
+      return;
+    }
+    const litros = num(alta.aceite_litros);
+    if (litros != null && (litros <= 0 || litros > 100)) {
+      setError("Litros de aceite inválidos.");
+      return;
+    }
+    const km = num(alta.km_actual);
+    if (km != null && km < 0) {
+      setError("Kilometraje inválido.");
+      return;
+    }
+
     setCreando(true);
     setError(null);
     const r = await crearVehiculo({
       patente: alta.patente.trim(),
+      cliente_id: alta.cliente_id || null,
       marca: alta.marca.trim() || null,
       modelo: alta.modelo.trim() || null,
+      anio,
+      motor: alta.motor.trim() || null,
+      combustible: alta.combustible || null,
+      color: alta.color.trim() || null,
+      vin: alta.vin.trim() || null,
+      km_actual: km,
+      aceite_tipo: alta.aceite_tipo.trim() || null,
+      aceite_litros: litros,
+      observaciones: alta.observaciones.trim() || null,
     });
-    setCreando(false);
     if (!r.ok) {
+      setCreando(false);
       setError(r.error);
       return;
     }
-    onCreado(r.vehiculo);
-    onElegir(r.vehiculo);
+
+    // La foto va DESPUES: recien ahora existe el id que la nombra. Si falla, el
+    // vehiculo ya esta creado y no se lo tira por eso — se avisa y sigue.
+    let vehiculo = r.vehiculo;
+    if (foto) {
+      const f = await subirImagenVehiculo(vehiculo.id, foto);
+      if (f.ok) vehiculo = { ...vehiculo, imagen_url: f.imagen_url };
+      else setAviso(`El vehículo se creó, pero la foto no subió: ${f.error}`);
+    }
+    setCreando(false);
+
+    onCreado(vehiculo);
+    onElegir(vehiculo);
   }
 
   const INPUT =
@@ -144,35 +263,176 @@ export default function BuscadorVehiculo({
         </div>
 
         {alta ? (
-          /* ── Alta rápida ──────────────────────────────────────────────── */
-          <div className="p-4">
-            <p className="mb-3 text-sm font-semibold text-slate-700">Vehículo nuevo</p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <input
-                autoFocus
-                value={alta.patente}
-                onChange={(e) => setAlta({ ...alta, patente: e.target.value.toUpperCase() })}
-                placeholder="Patente"
-                className={`${INPUT} font-mono font-semibold uppercase`}
-              />
-              <input
-                value={alta.marca}
-                onChange={(e) => setAlta({ ...alta, marca: e.target.value })}
-                placeholder="Marca"
-                className={INPUT}
-              />
-              <input
-                value={alta.modelo}
-                onChange={(e) => setAlta({ ...alta, modelo: e.target.value })}
-                placeholder="Modelo"
-                className={INPUT}
-              />
+          /* ── Alta: la ficha completa, sin salir de la venta ──────────────
+              El "lo completo después" en la practica es nunca, y el auto queda
+              sin aceite ni odometro — que es justo lo que el seguimiento de
+              mantenimiento necesita para servir de algo. */
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm font-semibold text-slate-700">Vehículo nuevo</p>
+              <span className="text-[11px] text-slate-400">Solo la patente es obligatoria</span>
             </div>
+
+            <div className="flex flex-col gap-4 sm:flex-row">
+              {/* Foto: se sube apenas se crea el auto. */}
+              <div className="w-full shrink-0 sm:w-40">
+                <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                  {fotoPreview ? (
+                    <>
+                      {/* Preview local (blob), no pasa por el optimizador. */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={fotoPreview} alt="Foto elegida" className="h-full w-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFoto(null);
+                          setFotoPreview(null);
+                        }}
+                        className="absolute right-1 top-1 rounded-full bg-white/90 p-1 text-slate-500 shadow hover:text-red-600"
+                        aria-label="Quitar foto"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => fotoRef.current?.click()}
+                      className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-[#3F8E91]"
+                    >
+                      <Camera className="h-6 w-6" />
+                      <span className="text-[11px] font-medium">Foto (opcional)</span>
+                    </button>
+                  )}
+                </div>
+                <input
+                  ref={fotoRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={elegirFoto}
+                  className="hidden"
+                />
+              </div>
+
+              <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-3">
+                <input
+                  autoFocus
+                  value={alta.patente}
+                  onChange={(e) => setAlta({ ...alta, patente: e.target.value.toUpperCase() })}
+                  placeholder="Patente *"
+                  className={`${INPUT} col-span-2 font-mono font-semibold uppercase sm:col-span-1`}
+                />
+                <select
+                  value={alta.cliente_id}
+                  onChange={(e) => setAlta({ ...alta, cliente_id: e.target.value })}
+                  className={`${INPUT} col-span-2`}
+                >
+                  <option value="">Sin cliente</option>
+                  {clientes.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+
+                <input
+                  value={alta.marca}
+                  onChange={(e) => setAlta({ ...alta, marca: e.target.value })}
+                  placeholder="Marca"
+                  className={INPUT}
+                />
+                <input
+                  value={alta.modelo}
+                  onChange={(e) => setAlta({ ...alta, modelo: e.target.value })}
+                  placeholder="Modelo"
+                  className={INPUT}
+                />
+                <input
+                  type="number"
+                  min={1900}
+                  max={2200}
+                  value={alta.anio}
+                  onChange={(e) => setAlta({ ...alta, anio: e.target.value })}
+                  placeholder="Año"
+                  className={INPUT}
+                />
+
+                <input
+                  value={alta.motor}
+                  onChange={(e) => setAlta({ ...alta, motor: e.target.value })}
+                  placeholder="Motor"
+                  className={INPUT}
+                />
+                <select
+                  value={alta.combustible}
+                  onChange={(e) => setAlta({ ...alta, combustible: e.target.value as Combustible | "" })}
+                  className={INPUT}
+                >
+                  <option value="">Combustible</option>
+                  {COMBUSTIBLES.map((c) => (
+                    <option key={c} value={c}>
+                      {COMBUSTIBLE_LABEL[c]}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  value={alta.color}
+                  onChange={(e) => setAlta({ ...alta, color: e.target.value })}
+                  placeholder="Color"
+                  className={INPUT}
+                />
+
+                <input
+                  value={alta.vin}
+                  onChange={(e) => setAlta({ ...alta, vin: e.target.value })}
+                  placeholder="Chasis / VIN"
+                  className={`${INPUT} col-span-2 font-mono`}
+                />
+                <input
+                  type="number"
+                  min={0}
+                  value={alta.km_actual}
+                  onChange={(e) => setAlta({ ...alta, km_actual: e.target.value })}
+                  placeholder="Km actual"
+                  className={INPUT}
+                />
+              </div>
+            </div>
+
+            {/* Aceite: separado porque es el dato que dispara el mantenimiento. */}
+            <div className="mt-3 rounded-xl border border-[#4FAEB2]/30 bg-[#4FAEB2]/5 p-3">
+              <p className="mb-2 text-xs font-semibold text-slate-700">Aceite que usa</p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <input
+                  value={alta.aceite_tipo}
+                  onChange={(e) => setAlta({ ...alta, aceite_tipo: e.target.value })}
+                  placeholder="Ej: 15W40 semisintético"
+                  className={INPUT}
+                />
+                <input
+                  type="number"
+                  min={0}
+                  step="0.1"
+                  value={alta.aceite_litros}
+                  onChange={(e) => setAlta({ ...alta, aceite_litros: e.target.value })}
+                  placeholder="Litros del cambio"
+                  className={INPUT}
+                />
+              </div>
+            </div>
+
+            <textarea
+              value={alta.observaciones}
+              onChange={(e) => setAlta({ ...alta, observaciones: e.target.value })}
+              rows={2}
+              placeholder="Observaciones"
+              className={`${INPUT} mt-3`}
+            />
+
             {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
-            <p className="mt-2 text-[11px] text-slate-500">
-              Se puede completar el resto (foto, aceite, cliente) después, desde su ficha.
-            </p>
-            <div className="mt-3 flex gap-2">
+            {aviso && <p className="mt-2 text-xs text-amber-700">{aviso}</p>}
+
+            <div className="mt-4 flex gap-2">
               <button
                 type="button"
                 onClick={guardarNuevo}
@@ -187,6 +447,7 @@ export default function BuscadorVehiculo({
                 onClick={() => {
                   setAlta(null);
                   setError(null);
+                  setAviso(null);
                 }}
                 className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
               >
@@ -267,7 +528,7 @@ export default function BuscadorVehiculo({
 
             <button
               type="button"
-              onClick={() => setAlta({ patente: q.trim().toUpperCase(), marca: "", modelo: "" })}
+              onClick={abrirAlta}
               className="flex w-full items-center gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-semibold text-[#3F8E91] transition-colors hover:bg-slate-100"
             >
               <Plus className="h-4 w-4" />

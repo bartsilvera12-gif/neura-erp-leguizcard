@@ -44,7 +44,7 @@ function fit(t: string, f: PDFFont, size: number, max: number): string {
  * imprime branding ajeno en un documento del cliente).
  */
 function logoBytes(): Uint8Array | null {
-  const candidatos = ["leguizcard-logo.png", "leguizcard-logo.jpeg"];
+  const candidatos = ["leguizcar-logo-doc.png", "leguizcar-logo.png", "leguizcar-logo.jpeg"];
   for (const archivo of candidatos) {
     try {
       const p = path.join(process.cwd(), "public", "brand", archivo);

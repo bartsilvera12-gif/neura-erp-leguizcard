@@ -2288,7 +2288,7 @@ export default function DashboardPage() {
               Dashboard
             </h1>
             <p className="mt-1 max-w-md text-sm leading-relaxed" style={{ color: Z.muted }}>
-              Leguizcard ERP · Vista {nivel === "supervisor" ? "de tu área" : "global"} · período alineado al filtro
+              Leguizcar ERP · Vista {nivel === "supervisor" ? "de tu área" : "global"} · período alineado al filtro
             </p>
           </div>
         </div>

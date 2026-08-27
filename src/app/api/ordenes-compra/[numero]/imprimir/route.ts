@@ -161,7 +161,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ n
     <div class="firma">Recibido por (proveedor)</div>
   </div>
 
-  <div class="pie">Orden de compra generada con Leguizcard ERP · No válido como comprobante fiscal</div>
+  <div class="pie">Orden de compra generada con Leguizcar ERP · No válido como comprobante fiscal</div>
 
   <div class="noprint" style="margin-top:20px;text-align:center">
     <button onclick="window.print()" style="background:#4FAEB2;color:#fff;border:0;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer">Imprimir</button>

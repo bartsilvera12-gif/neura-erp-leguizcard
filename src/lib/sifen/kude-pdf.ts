@@ -118,8 +118,10 @@ function formatMonto(nStr: string, moneda: string): string {
  */
 function readLogoBytes(): Uint8Array | null {
   const candidatos = [
-    path.join(process.cwd(), "public", "brand", "leguizcard-logo.png"),
-    path.join(process.cwd(), "public", "brand", "leguizcard-logo.jpeg"),
+    // La version -doc es la de hoja A4, que es el formato del KuDE.
+    path.join(process.cwd(), "public", "brand", "leguizcar-logo-doc.png"),
+    path.join(process.cwd(), "public", "brand", "leguizcar-logo.png"),
+    path.join(process.cwd(), "public", "brand", "leguizcar-logo.jpeg"),
   ];
   for (const p of candidatos) {
     try {
@@ -285,7 +287,7 @@ export async function buildKudePdfBuffer(input: BuildKudePdfInput): Promise<Buff
 
   const pdfDoc = await PDFDocument.create();
   pdfDoc.setTitle(`KuDE — Factura ${numeroFactura}`);
-  pdfDoc.setAuthor("Leguizcard ERP");
+  pdfDoc.setAuthor("Leguizcar ERP");
 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -724,7 +726,7 @@ export async function buildKudePdfBuffer(input: BuildKudePdfInput): Promise<Buff
     leg += legendLead;
   }
   leg += 2;
-  page.drawText("Generado con Leguizcard ERP", {
+  page.drawText("Generado con Leguizcar ERP", {
     x: margin + footPad,
     y: baselineFromTop(page, leg),
     size: 6.5,

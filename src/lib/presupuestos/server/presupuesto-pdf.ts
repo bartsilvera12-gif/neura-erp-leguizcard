@@ -102,8 +102,10 @@ function wrap(t: string, f: PDFFont, size: number, max: number): string[] {
 /** Logo de la instancia. Devuelve los bytes y el formato para embeberlo. */
 function logoBytes(): { bytes: Uint8Array; tipo: "png" | "jpg" } | null {
   const candidatos: { archivo: string; tipo: "png" | "jpg" }[] = [
-    { archivo: "leguizcard-logo.png", tipo: "png" },
-    { archivo: "leguizcard-logo.jpeg", tipo: "jpg" },
+    // La version -doc es la de hoja A4; la otra, la del ticket termico.
+    { archivo: "leguizcar-logo-doc.png", tipo: "png" },
+    { archivo: "leguizcar-logo.png", tipo: "png" },
+    { archivo: "leguizcar-logo.jpeg", tipo: "jpg" },
   ];
   for (const c of candidatos) {
     try {

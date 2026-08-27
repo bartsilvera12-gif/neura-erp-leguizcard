@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
  */
 export async function POST() {
   return NextResponse.json(
-    { error: "Creación de empresas deshabilitada en instancia dedicada monocliente (Leguizcard)." },
+    { error: "Creación de empresas deshabilitada en instancia dedicada monocliente (Leguizcar)." },
     { status: 410 }
   );
 }

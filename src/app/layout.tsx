@@ -17,8 +17,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Leguizcard ERP",
-  description: "Sistema de gestión empresarial de Leguizcard",
+  title: "Leguizcar ERP",
+  description: "Sistema de gestión empresarial de Leguizcar",
 };
 
 export default function RootLayout({

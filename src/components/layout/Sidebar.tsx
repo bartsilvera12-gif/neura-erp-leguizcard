@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   // Inbox,
   // usado por el ítem "Recepción" (oculto)
-  ReceiptText,
+  // ReceiptText, -- lo usa el item Recibos, hoy oculto
   Banknote,
   BarChart3,
   Building2,
@@ -107,7 +107,13 @@ const MENU_STRUCTURE: MenuItem[] = [
     // { label: "Depósitos / Ubicaciones", href: "/inventario/ubicaciones" },
   ]},
   { key: "clientes", slug: "clientes", label: "Clientes", href: "/clientes", icon: Users },
-  { key: "gestion-clientes", slug: "gestion-clientes", label: "Gestión Clientes", href: "/gestion-clientes", icon: Users },
+  // Gestión Clientes OCULTA de la interfaz (pedido del negocio: de mas para un
+  // lubricentro, la ficha del cliente ya alcanza). Se oculta solo el item del
+  // menu: la pantalla sigue en pie porque Facturas y Tipificaciones enlazan a
+  // ella, y `lib/gestion-clientes` lo usan Clientes, Pagos y Facturas.
+  // Para reactivar: descomentar esta línea y la key "gestion-clientes" en
+  // MENU_FAMILIES.
+  // { key: "gestion-clientes", slug: "gestion-clientes", label: "Gestión Clientes", href: "/gestion-clientes", icon: Users },
   {
     key: "compras",
     slug: "compras",
@@ -134,7 +140,15 @@ const MENU_STRUCTURE: MenuItem[] = [
   { key: "presupuestos", slug: "presupuestos", label: "Presupuestos", href: "/presupuestos", icon: FileText },
   { key: "gastos", slug: "gastos", label: "Gastos", href: "/gastos", icon: Receipt },
   // Recibos de dinero: comprobante interno de dinero recibido (no fiscal).
-  { key: "recibos", slug: "recibos", label: "Recibos", href: "/recibos", icon: ReceiptText },
+  // OCULTO de la interfaz (pedido del negocio).
+  //
+  // OJO: se oculta la PANTALLA, no el recibo. La venta y el cobro siguen
+  // generando y abriendo su PDF (lib/recibos/client). Lo que se pierde es el
+  // lugar para reimprimir uno viejo o anularlo.
+  //
+  // Para reactivar: descomentar esta línea, el import de `ReceiptText` y la
+  // key "recibos" en MENU_FAMILIES.
+  // { key: "recibos", slug: "recibos", label: "Recibos", href: "/recibos", icon: ReceiptText },
   {
     key: "notas_credito", slug: "notas_credito", label: "Notas de crédito",
     href: "/notas-credito", icon: ScrollText,
@@ -205,8 +219,8 @@ const MENU_STRUCTURE: MenuItem[] = [
  */
 const MENU_FAMILIES: { id: string; titulo: string; keys: string[] }[] = [
   { id: "inicio", titulo: "Inicio", keys: ["dashboard"] },
-  { id: "comercial", titulo: "Comercial", keys: ["clientes", "vehiculos", "gestion-clientes", "ventas", "presupuestos"] },
-  { id: "finanzas", titulo: "Finanzas", keys: ["cobros", "pagos", "recibos", "gastos", "notas_credito", "comisiones", "reportes"] },
+  { id: "comercial", titulo: "Comercial", keys: ["clientes", "vehiculos", "ventas", "presupuestos"] },
+  { id: "finanzas", titulo: "Finanzas", keys: ["cobros", "pagos", "gastos", "notas_credito", "comisiones", "reportes"] },
   { id: "operaciones", titulo: "Operaciones", keys: ["inventario", "servicios", "compras"] },
   { id: "omnicanal", titulo: "Omnicanal", keys: ["conversaciones"] },
   { id: "administracion", titulo: "Administración", keys: ["usuarios", "configuracion"] },

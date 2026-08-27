@@ -10,6 +10,7 @@ import {
   toggleEstado,
   updateCliente,
 } from "@/lib/clientes/storage";
+import VehiculosDelCliente from "@/components/clientes/VehiculosDelCliente";
 import {
   apiDeleteCliente,
   apiGetBajaOperativaPreview,
@@ -80,10 +81,11 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 // ── Tipos de pestaña ──────────────────────────────────────────────────────────
 
-type TabId = "informacion" | "estado_cuenta" | "suscripciones" | "marketing" | "proyectos" | "actividad" | "notas";
+type TabId = "informacion" | "vehiculos" | "estado_cuenta" | "suscripciones" | "marketing" | "proyectos" | "actividad" | "notas";
 
 const TABS: { id: TabId; label: string; showWhen?: (c: Cliente) => boolean }[] = [
   { id: "informacion",   label: "Información"      },
+  { id: "vehiculos",     label: "Vehículos"        },
   { id: "estado_cuenta", label: "Estado de cuenta" },
   { id: "suscripciones", label: "Suscripciones"    },
   { id: "marketing",     label: "Marketing",        showWhen: (c) => c.tipo_servicio_cliente === "marketing" },
@@ -1931,6 +1933,11 @@ export default function ClienteDetailPage() {
                 </button>
               </div>
             </form>
+          )}
+
+          {/* ── VEHÍCULOS ────────────────────────────────────────────────── */}
+          {activeTab === "vehiculos" && (
+            <VehiculosDelCliente clienteId={cliente.id} clienteLabel={clienteNombre(cliente)} />
           )}
 
           {/* ── ESTADO DE CUENTA ─────────────────────────────────────────── */}

@@ -121,6 +121,8 @@ export function UsuarioFormFields({
   const fLabel = usuarioFormLabel;
   const fInput = fieldClassName ?? usuarioFormInput;
   const fSelect = usuarioFormSelect;
+  // Solo si un usuario viejo ya quedo guardado con ese contrato: el selector ya
+  // no ofrece las opciones que lo activan.
   const showComision = form.tipo_contrato === "comision" || form.tipo_contrato === "mixto";
   const showSalario = form.tipo_contrato !== "comision";
 
@@ -184,9 +186,10 @@ export function UsuarioFormFields({
             <div>
               <label className={fLabel}>Tipo de contrato</label>
               <select name="tipo_contrato" value={form.tipo_contrato} onChange={onChange} className={fSelect}>
+                {/* Comision y Mixto quedan fuera: el cliente no usa comisiones
+                    de empleados y el modulo esta apagado. Elegirlas dejaria un
+                    porcentaje configurado que nada lee. */}
                 <option value="salario">Salario fijo</option>
-                <option value="comision">Comisión</option>
-                <option value="mixto">Mixto (salario + comisión)</option>
                 <option value="prestador_servicio">Prestador de servicio</option>
               </select>
             </div>

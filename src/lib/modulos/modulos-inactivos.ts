@@ -63,6 +63,11 @@ export const MODULOS_INACTIVOS: ModuloInactivo[] = [
     rutas: ["/api/campanas", "/dashboard/campanas"],
   },
   {
+    slug: "comisiones",
+    motivo: "El cliente decidio no usar comisiones de empleados",
+    rutas: ["/api/comisiones", "/comisiones", "/configuracion/comisiones"],
+  },
+  {
     slug: "sorteos",
     motivo: "No aplica a un lubricentro",
     rutas: ["/api/sorteos", "/sorteos", "/r/"],

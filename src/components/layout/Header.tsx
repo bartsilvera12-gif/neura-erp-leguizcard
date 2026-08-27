@@ -2,10 +2,11 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, ChevronDown, LogOut, Menu } from "lucide-react";
+import { ChevronDown, LogOut, Menu } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { signOut } from "@/lib/auth";
 import { useBoot } from "@/components/BootContext";
+import CampanaAlertas from "@/components/layout/CampanaAlertas";
 
 type HeaderUsuario = {
   nombre: string | null;
@@ -101,16 +102,7 @@ export default function Header() {
 
       <div className="flex items-center gap-2">
         {/* Notificaciones */}
-        <button
-          type="button"
-          className="relative rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-50 hover:text-[#3F8E91]"
-          aria-label="Notificaciones"
-        >
-          <Bell className="h-5 w-5" />
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#4FAEB2] text-[10px] font-bold text-white">
-            0
-          </span>
-        </button>
+        <CampanaAlertas />
 
         {/* Avatar + menú usuario */}
         <div className="relative" ref={menuRef}>

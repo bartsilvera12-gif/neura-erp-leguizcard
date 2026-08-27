@@ -6,36 +6,38 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  LayoutDashboard,
-  ShoppingCart,
-  Package,
-  Users,
-  FileText,
-  Settings,
-  UserCog,
-  Building2,
-  ChevronDown,
-  ChevronRight,
-  ChevronLeft,
-  Star,
-  Sparkles,
-  Search,
-  Receipt,
-  Megaphone,
-  Ticket,
-  SendHorizontal,
-  MessageCircle,
-  ScrollText,
-  Percent,
-  ChefHat,
-  Utensils,
-  BarChart3,
-  Wallet,
-  Banknote,
-  Truck,
-  // Inbox, // usado por el ítem "Recepción" (oculto)
+  // Inbox,
+  // usado por el ítem "Recepción" (oculto)
   ReceiptText,
+  Banknote,
+  BarChart3,
+  Building2,
   Car,
+  ChefHat,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  LayoutDashboard,
+  Megaphone,
+  MessageCircle,
+  Package,
+  Percent,
+  Receipt,
+  ScrollText,
+  Search,
+  SendHorizontal,
+  Settings,
+  ShoppingCart,
+  Sparkles,
+  Star,
+  Ticket,
+  Truck,
+  UserCog,
+  Users,
+  Utensils,
+  Wallet,
+  Wrench,
 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
@@ -142,8 +144,10 @@ const MENU_STRUCTURE: MenuItem[] = [
       { label: "Próximos servicios", href: "/vehiculos/proximos-servicios" },
     ],
   },
-  // Recetas: composicion y costeo de un producto a partir de sus insumos.
-  // Es la base para modelar los servicios del lubricentro (mano de obra + insumos).
+  // Servicios del lubricentro: mano de obra + los productos que consume, todo
+  // en una pantalla. Se apoya en Recetas, que queda para casos que no son un
+  // servicio (composicion y costeo de un producto cualquiera).
+  { key: "servicios", slug: "servicios", label: "Servicios", href: "/servicios", icon: Wrench },
   { key: "recetas", slug: "recetas", label: "Recetas", href: "/dashboard/recetas", icon: ChefHat },
   // Cobranzas: cuentas por cobrar y registro de cobros.
   { key: "cobros", slug: "cobros", label: "Cobranzas", href: "/cobros", icon: Banknote },
@@ -191,7 +195,7 @@ const MENU_FAMILIES: { id: string; titulo: string; keys: string[] }[] = [
   { id: "inicio", titulo: "Inicio", keys: ["dashboard"] },
   { id: "comercial", titulo: "Comercial", keys: ["clientes", "vehiculos", "gestion-clientes", "ventas", "presupuestos"] },
   { id: "finanzas", titulo: "Finanzas", keys: ["cobros", "pagos", "recibos", "gastos", "notas_credito", "comisiones", "reportes"] },
-  { id: "operaciones", titulo: "Operaciones", keys: ["inventario", "compras", "remision", "recetas"] },
+  { id: "operaciones", titulo: "Operaciones", keys: ["inventario", "servicios", "compras", "remision", "recetas"] },
   { id: "omnicanal", titulo: "Omnicanal", keys: ["conversaciones"] },
   { id: "administracion", titulo: "Administración", keys: ["usuarios", "configuracion"] },
 ];

@@ -21,6 +21,7 @@ const SIDEBAR_SLUG_HREF_ORDER: { slug: string; href: string }[] = [
   { slug: "presupuestos", href: "/presupuestos" },
   { slug: "gastos", href: "/gastos" },
   { slug: "cobros", href: "/pagos" },
+  { slug: "servicios", href: "/servicios" },
   { slug: "comisiones", href: "/comisiones" },
   { slug: "notas_credito", href: "/notas-credito" },
   { slug: "usuarios", href: "/usuarios" },
@@ -150,6 +151,7 @@ export function pathRequiresModuleSlug(pathname: string): string | null {
   if (p.startsWith("/gastos")) return "gastos";
   // Cobros: la página vive en /pagos y el módulo habilitado es `cobros`.
   if (p.startsWith("/pagos")) return "cobros";
+  if (p.startsWith("/servicios")) return "servicios";
   if (p.startsWith("/comisiones")) return "comisiones";
   if (p.startsWith("/configuracion")) return "configuracion";
   if (p.startsWith("/planes")) return "planes";

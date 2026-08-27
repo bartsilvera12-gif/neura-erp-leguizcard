@@ -358,7 +358,9 @@ export default function VehiculoDetallePage({ params }: { params: Promise<{ id: 
               </button>
             </div>
             {errorKm && <p className="text-xs text-red-600">{errorKm}</p>}
-            <p className="text-[11px] text-slate-400">El odómetro no puede retroceder.</p>
+            <p className="text-[11px] text-slate-400">
+              Una venta nunca lo baja. Para corregir un error de tipeo, editá el vehículo.
+            </p>
           </form>
         </div>
       </div>

@@ -8,6 +8,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import PageHeader from "@/components/ui/PageHeader";
 import { PackageMinus, Loader2, RefreshCw } from "lucide-react";
+import Paginador from "@/components/reportes/Paginador";
+import { usePaginacion } from "@/lib/reportes/usePaginacion";
 
 interface Row {
   id: string;
@@ -55,6 +57,8 @@ export default function ReporteStockMinimoPage() {
     [i.nombre, i.sku, i.codigo_barras, i.marca, i.categoria_nombre, i.proveedor_nombre]
       .some((v) => (v ?? "").toLowerCase().includes(q))
   );
+
+  const pag1 = usePaginacion(filtrados);
 
   return (
     <div className="space-y-6">
@@ -113,7 +117,7 @@ export default function ReporteStockMinimoPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtrados.map((r) => (
+                {pag1.filas.map((r) => (
                   <tr key={r.id} className="transition-colors hover:bg-[#4FAEB2]/[0.03]">
                     <td className="px-5 py-2.5">
                       <Link href={`/inventario/${r.id}/editar`} className="font-medium text-slate-800 hover:text-[#3F8E91]">
@@ -135,6 +139,7 @@ export default function ReporteStockMinimoPage() {
                 ))}
               </tbody>
             </table>
+            <Paginador {...pag1.props} etiqueta="productos" />
           </div>
         )}
       </div>

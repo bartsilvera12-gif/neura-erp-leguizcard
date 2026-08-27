@@ -8,6 +8,8 @@ import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import { getCreditosReporte } from "@/lib/reportes/storage";
 import { productoMatchesQuery } from "@/lib/productos/token-search";
 import type { CreditosReporte, AgingBucket } from "@/lib/reportes/types";
+import Paginador from "@/components/reportes/Paginador";
+import { usePaginacion } from "@/lib/reportes/usePaginacion";
 
 const AGING_OPCIONES: { value: AgingBucket; label: string }[] = [
   { value: "todos", label: "Toda la antigüedad" },
@@ -59,6 +61,8 @@ export default function CreditosReportePage() {
       return productoMatchesQuery(busqueda, c.cliente_nombre, c.cliente_ruc);
     });
   }, [data, busqueda, soloConSaldo, aging]);
+
+  const pag1 = usePaginacion(filtrados);
 
   return (
     <div className="space-y-6">
@@ -117,7 +121,7 @@ export default function CreditosReportePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filtrados.map((c) => (
+                  {pag1.filas.map((c) => (
                     <tr key={c.cliente_id} className="transition-colors hover:bg-[#4FAEB2]/5">
                       <td className="px-3 py-2.5 text-xs font-medium text-slate-800">{c.cliente_nombre}</td>
                       <td className="px-3 py-2.5 font-mono text-xs text-slate-500">{c.cliente_ruc || "—"}</td>
@@ -136,6 +140,7 @@ export default function CreditosReportePage() {
                   ))}
                 </tbody>
               </table>
+              <Paginador {...pag1.props} etiqueta="créditos" />
             </div>
           )}
         </div>

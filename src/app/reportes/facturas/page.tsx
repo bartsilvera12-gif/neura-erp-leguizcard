@@ -11,6 +11,8 @@ import ClienteBuscador from "@/components/clientes/ClienteBuscador";
 import { getClientes } from "@/lib/clientes/storage";
 import type { Cliente } from "@/lib/clientes/types";
 import { FileText, Download, ExternalLink, Loader2, Search } from "lucide-react";
+import Paginador from "@/components/reportes/Paginador";
+import { usePaginacion } from "@/lib/reportes/usePaginacion";
 
 interface FacturaRow {
   venta_id: string;
@@ -75,6 +77,8 @@ export default function ReporteFacturasPage() {
 
   const inputCls = "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20";
   const tot = data?.totales;
+
+  const pag1 = usePaginacion(data?.facturas ?? []);
 
   return (
     <div className="space-y-6">
@@ -152,7 +156,7 @@ export default function ReporteFacturasPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {data.facturas.map((f) => (
+                {pag1.filas.map((f) => (
                   <tr key={f.venta_id} className="transition-colors hover:bg-[#4FAEB2]/[0.03]">
                     <td className="px-5 py-3 font-mono font-semibold text-slate-800">{f.numero_completo}</td>
                     <td className="px-3 py-3 whitespace-nowrap text-slate-600">{fechaHora(f.emitida_at)}</td>
@@ -192,6 +196,7 @@ export default function ReporteFacturasPage() {
                 </tr>
               </tfoot>
             </table>
+            <Paginador {...pag1.props} etiqueta="facturas" />
           </div>
         )}
       </div>

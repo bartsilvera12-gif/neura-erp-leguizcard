@@ -9,6 +9,8 @@ import { getConciliacionReporte } from "@/lib/reportes/storage";
 import { mesActualAsuncion } from "@/lib/fechas/asuncion-bounds";
 import type { ConciliacionReporte, ConciliacionMovRow } from "@/lib/reportes/types";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import Paginador from "@/components/reportes/Paginador";
+import { usePaginacion } from "@/lib/reportes/usePaginacion";
 
 function formatGs(v: number) {
   return `Gs. ${Math.round(v).toLocaleString("es-PY")}`;
@@ -72,6 +74,8 @@ export default function ConciliacionReportePage() {
   }
 
   const cuentaEstado = (e: string) => movs.filter((m) => m.estado === e).length;
+
+  const pag1 = usePaginacion(movs);
 
   return (
     <div className="space-y-8">
@@ -182,7 +186,7 @@ export default function ConciliacionReportePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {movs.map((m) => (
+                    {pag1.filas.map((m) => (
                       <tr key={m.id} className="border-b border-slate-100 last:border-0">
                         <td className="py-3 pr-4 text-slate-600 text-xs tabular-nums">{formatFecha(m.fecha)}</td>
                         <td className="py-3 pr-4 font-mono text-xs text-slate-500">{m.numero ?? "—"}</td>
@@ -231,6 +235,7 @@ export default function ConciliacionReportePage() {
                     ))}
                   </tbody>
                 </table>
+                <Paginador {...pag1.props} etiqueta="movimientos" />
               </div>
             )}
           </div>

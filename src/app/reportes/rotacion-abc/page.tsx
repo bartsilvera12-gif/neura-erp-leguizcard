@@ -5,6 +5,7 @@ import PageHeader from "@/components/ui/PageHeader";
 import { getRotacionAbcReporte, type RotacionAbc } from "@/lib/reportes/storage";
 import type { RangoABC } from "@/lib/reportes/abc";
 import { ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Boxes, TrendingUp, BarChart3, TrendingDown } from "lucide-react";
+import Paginador from "@/components/reportes/Paginador";
 
 function fmtGs(v: number) {
   return `Gs. ${Math.round(v).toLocaleString("es-PY")}`;
@@ -163,19 +164,6 @@ export default function RotacionAbcPage() {
                 <option value="B">Rango B</option>
                 <option value="C">Rango C</option>
               </select>
-              <select
-                value={pageSize}
-                onChange={(e) => setPageSize(Number(e.target.value))}
-                className="w-28 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#4FAEB2]/30"
-                title="Ítems por página"
-              >
-                {PAGE_SIZES.map((n) => (
-                  <option key={n} value={n}>{n} / pág.</option>
-                ))}
-              </select>
-              <span className="ml-auto text-sm text-slate-400 tabular-nums">
-                {cargando ? "…" : `${fromIdx}–${toIdx} de ${fmtNum(total)}`}
-              </span>
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-slate-200">
@@ -209,17 +197,19 @@ export default function RotacionAbcPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
-
-            {/* Paginación */}
-            <div className="mt-4 flex items-center justify-between gap-3">
-              <span className="text-xs text-slate-500 tabular-nums">Página {safePage} de {totalPages}</span>
-              <div className="flex items-center gap-1">
-                <button onClick={() => setPage(1)} disabled={safePage <= 1} className="rounded-md border border-slate-200 p-1.5 text-slate-500 disabled:opacity-40 hover:bg-slate-50"><ChevronsLeft className="h-4 w-4" /></button>
-                <button onClick={() => setPage((n) => Math.max(1, n - 1))} disabled={safePage <= 1} className="rounded-md border border-slate-200 p-1.5 text-slate-500 disabled:opacity-40 hover:bg-slate-50"><ChevronLeft className="h-4 w-4" /></button>
-                <button onClick={() => setPage((n) => Math.min(totalPages, n + 1))} disabled={safePage >= totalPages} className="rounded-md border border-slate-200 p-1.5 text-slate-500 disabled:opacity-40 hover:bg-slate-50"><ChevronRight className="h-4 w-4" /></button>
-                <button onClick={() => setPage(totalPages)} disabled={safePage >= totalPages} className="rounded-md border border-slate-200 p-1.5 text-slate-500 disabled:opacity-40 hover:bg-slate-50"><ChevronsRight className="h-4 w-4" /></button>
-              </div>
+              {/* Este reporte pagina en el SERVIDOR (la consulta trae solo la
+                  pagina pedida), pero usa el mismo control que los demas. */}
+              <Paginador
+                pagina={safePage}
+                totalPaginas={totalPages}
+                total={total}
+                desde={fromIdx}
+                hasta={toIdx}
+                tamano={pageSize}
+                onPagina={setPage}
+                onTamano={setPageSize}
+                etiqueta="productos"
+              />
             </div>
           </div>
         </>

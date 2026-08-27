@@ -8,6 +8,8 @@ import MesSelector from "@/components/reportes/MesSelector";
 import { getVentasReporte } from "@/lib/reportes/storage";
 import { mesActualAsuncion } from "@/lib/fechas/asuncion-bounds";
 import type { VentasReporte, TipoPrecioReporte } from "@/lib/reportes/types";
+import Paginador from "@/components/reportes/Paginador";
+import { usePaginacion } from "@/lib/reportes/usePaginacion";
 
 function formatGs(v: number) {
   return `Gs. ${Math.round(v).toLocaleString("es-PY")}`;
@@ -38,6 +40,9 @@ export default function VentasReportePage() {
     getVentasReporte(mes).then((d) => { if (!cancel) { setData(d); setCargando(false); } });
     return () => { cancel = true; };
   }, [mes]);
+
+  const pag1 = usePaginacion(data?.ventas ?? []);
+  const pag2 = usePaginacion(data?.porProducto ?? []);
 
   return (
     <div className="space-y-8">
@@ -104,7 +109,7 @@ export default function VentasReportePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.ventas.map((v) => (
+                    {pag1.filas.map((v) => (
                       <tr key={v.id} className="border-b border-slate-100 last:border-0">
                         <td className="py-3 pr-4 text-slate-600 text-xs tabular-nums">{formatFecha(v.fecha)}</td>
                         <td className="py-3 pr-4 font-mono text-xs text-slate-500">{v.numero_control}</td>
@@ -116,6 +121,7 @@ export default function VentasReportePage() {
                     ))}
                   </tbody>
                 </table>
+                <Paginador {...pag1.props} etiqueta="ventas" />
               </div>
             )}
           </div>
@@ -136,7 +142,7 @@ export default function VentasReportePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.porProducto.map((p, i) => (
+                    {pag2.filas.map((p, i) => (
                       <tr key={i} className="border-b border-slate-100 last:border-0">
                         <td className="py-2.5 pr-4 text-slate-700">{p.producto_nombre}</td>
                         <td className="py-2.5 pr-4 text-right tabular-nums text-slate-600">{p.cantidad}</td>
@@ -145,6 +151,7 @@ export default function VentasReportePage() {
                     ))}
                   </tbody>
                 </table>
+                <Paginador {...pag2.props} etiqueta="productos" />
               </div>
             )}
           </div>

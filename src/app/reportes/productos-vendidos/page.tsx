@@ -9,6 +9,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/ui/PageHeader";
 import { Boxes, Loader2, Search } from "lucide-react";
+import Paginador from "@/components/reportes/Paginador";
+import { usePaginacion } from "@/lib/reportes/usePaginacion";
 
 interface Resumen { producto_id: string; producto_nombre: string; categoria_nombre: string | null; unidades: number; total: number; ventas: number; }
 interface Detalle { fecha: string; numero_control: string; numero_factura: string | null; cajero: string | null; vendedor: string | null; producto_id: string; producto_nombre: string; categoria_nombre: string | null; cantidad: number; precio_venta: number; total_linea: number; }
@@ -64,6 +66,9 @@ export default function ReporteProductosVendidosPage() {
   const q = prodFiltro.trim().toLowerCase();
   const resumenF = useMemo(() => q === "" ? resumen : resumen.filter((r) => r.producto_nombre.toLowerCase().includes(q)), [resumen, q]);
   const detalleF = useMemo(() => q === "" ? detalle : detalle.filter((d) => d.producto_nombre.toLowerCase().includes(q)), [detalle, q]);
+
+  const pag1 = usePaginacion(resumenF);
+  const pag2 = usePaginacion(detalleF);
 
   return (
     <div className="space-y-6">
@@ -124,7 +129,7 @@ export default function ReporteProductosVendidosPage() {
                   <th className="px-3 py-3 text-right font-semibold">Unidades</th><th className="px-3 py-3 text-right font-semibold">Ventas</th><th className="px-4 py-3 text-right font-semibold">Total</th>
                 </tr></thead>
                 <tbody className="divide-y divide-slate-100">
-                  {resumenF.map((r) => (
+                  {pag1.filas.map((r) => (
                     <tr key={r.producto_id} className="hover:bg-[#4FAEB2]/[0.03]">
                       <td className="px-5 py-2.5 font-medium text-slate-800">{r.producto_nombre}</td>
                       <td className="px-3 py-2.5 text-slate-600">{r.categoria_nombre || "—"}</td>
@@ -135,6 +140,7 @@ export default function ReporteProductosVendidosPage() {
                   ))}
                 </tbody>
               </table>
+              <Paginador {...pag1.props} etiqueta="productos" />
             </div>
           )
         ) : (
@@ -146,7 +152,7 @@ export default function ReporteProductosVendidosPage() {
                   <th className="px-3 py-3 font-semibold">Vendedor</th><th className="px-3 py-3 text-right font-semibold">Cant.</th><th className="px-3 py-3 text-right font-semibold">P. unit.</th><th className="px-4 py-3 text-right font-semibold">Total</th>
                 </tr></thead>
                 <tbody className="divide-y divide-slate-100">
-                  {detalleF.map((d, i) => (
+                  {pag2.filas.map((d, i) => (
                     <tr key={i} className="hover:bg-[#4FAEB2]/[0.03]">
                       <td className="px-5 py-2.5 whitespace-nowrap text-slate-600">{fh(d.fecha)}</td>
                       <td className="px-3 py-2.5 font-mono text-xs text-slate-500">{d.numero_factura || d.numero_control}</td>
@@ -159,6 +165,7 @@ export default function ReporteProductosVendidosPage() {
                   ))}
                 </tbody>
               </table>
+              <Paginador {...pag2.props} etiqueta="líneas" />
             </div>
           )
         )}

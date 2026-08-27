@@ -12,6 +12,8 @@ import { productoMatchesQuery } from "@/lib/productos/token-search";
 import { mesActualAsuncion } from "@/lib/fechas/asuncion-bounds";
 import type { ComprasPanel } from "@/lib/reportes/types";
 import type { Compra } from "@/lib/compras/types";
+import Paginador from "@/components/reportes/Paginador";
+import { usePaginacion } from "@/lib/reportes/usePaginacion";
 
 function formatGs(v: number) {
   return `Gs. ${Math.round(v).toLocaleString("es-PY")}`;
@@ -310,6 +312,7 @@ function Meta({ label, value }: { label: string; value: string }) {
 }
 
 function VistaCompras({ filas, onVer }: { filas: ComprasPanel["compras"]; onVer: (c: ComprasPanel["compras"][number]) => void }) {
+  const pag = usePaginacion(filas);
   return (
     <div className="rounded-2xl border border-[#4FAEB2]/30 bg-white p-6 shadow-sm ring-1 ring-[#4FAEB2]/10">
       {filas.length === 0 ? (
@@ -325,7 +328,7 @@ function VistaCompras({ filas, onVer }: { filas: ComprasPanel["compras"]; onVer:
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filas.map((c) => (
+              {pag.filas.map((c) => (
                 <tr key={c.numero_control} className="transition-colors hover:bg-[#4FAEB2]/5">
                   <td className="px-3 py-2.5 text-xs tabular-nums text-slate-600">{formatFecha(c.fecha)}</td>
                   <td className="px-3 py-2.5 font-mono text-xs font-semibold text-[#3F8E91]">
@@ -348,6 +351,7 @@ function VistaCompras({ filas, onVer }: { filas: ComprasPanel["compras"]; onVer:
               ))}
             </tbody>
           </table>
+          <Paginador {...pag.props} etiqueta="compras" />
         </div>
       )}
     </div>
@@ -355,6 +359,7 @@ function VistaCompras({ filas, onVer }: { filas: ComprasPanel["compras"]; onVer:
 }
 
 function VistaPendientes({ filas }: { filas: ComprasPanel["pendientes"] }) {
+  const pag = usePaginacion(filas);
   return (
     <div className="rounded-2xl border border-[#4FAEB2]/30 bg-white p-6 shadow-sm ring-1 ring-[#4FAEB2]/10">
       {filas.length === 0 ? (
@@ -372,7 +377,7 @@ function VistaPendientes({ filas }: { filas: ComprasPanel["pendientes"] }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filas.map((p) => {
+              {pag.filas.map((p) => {
                 const est = ESTADO_OC[p.estado] ?? { lbl: p.estado, cls: "bg-slate-100 text-slate-500" };
                 return (
                   <tr key={p.orden_item_id} className="transition-colors hover:bg-[#4FAEB2]/5">
@@ -397,6 +402,7 @@ function VistaPendientes({ filas }: { filas: ComprasPanel["pendientes"] }) {
               })}
             </tbody>
           </table>
+          <Paginador {...pag.props} etiqueta="pendientes" />
         </div>
       )}
     </div>

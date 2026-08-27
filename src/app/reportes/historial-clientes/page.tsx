@@ -7,6 +7,8 @@ import PageHeader from "@/components/ui/PageHeader";
 import StatCard from "@/components/ui/StatCard";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import Paginador from "@/components/reportes/Paginador";
+import { usePaginacion } from "@/lib/reportes/usePaginacion";
 
 type Item = {
   cliente_id: string | null;
@@ -68,6 +70,8 @@ export default function HistorialClientesPage() {
       );
     });
   }, [items, busqueda, soloInactivos]);
+
+  const pag1 = usePaginacion(filtrados);
 
   return (
     <div className="space-y-8">
@@ -133,7 +137,7 @@ export default function HistorialClientesPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtrados.map((i) => {
+                {pag1.filas.map((i) => {
                   const inactivo = i.visitas > 0 && (i.dias_sin_venir ?? 0) > 180;
                   return (
                     <tr key={i.cliente_id ?? i.cliente_nombre} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60">
@@ -181,6 +185,7 @@ export default function HistorialClientesPage() {
                 })}
               </tbody>
             </table>
+            <Paginador {...pag1.props} etiqueta="clientes" />
           </EdgeScrollArea>
         )}
       </div>

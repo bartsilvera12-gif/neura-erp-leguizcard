@@ -10,6 +10,8 @@ import { mesActualAsuncion } from "@/lib/fechas/asuncion-bounds";
 import type { EstadoCuentaReporte } from "@/lib/reportes/types";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { EstadoCuentaClienteBlock } from "@/components/cobros/EstadoCuentaClienteBlock";
+import Paginador from "@/components/reportes/Paginador";
+import { usePaginacion } from "@/lib/reportes/usePaginacion";
 
 function formatGs(v: number) {
   return `Gs. ${Math.round(v).toLocaleString("es-PY")}`;
@@ -52,6 +54,8 @@ export default function EstadoCuentaReportePage() {
     getEstadoCuentaReporte(mes).then((d) => { if (!cancel) { setData(d); setCargando(false); } });
     return () => { cancel = true; };
   }, [mes]);
+
+  const pag1 = usePaginacion(data?.movimientos ?? []);
 
   return (
     <div className="space-y-8">
@@ -114,7 +118,7 @@ export default function EstadoCuentaReportePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.movimientos.map((m, i) => (
+                    {pag1.filas.map((m, i) => (
                       <tr key={i} className="border-b border-slate-100 last:border-0">
                         <td className="py-3 pr-4 text-slate-600 text-xs tabular-nums">{formatFecha(m.fecha)}</td>
                         <td className="py-3 pr-4">{m.tipo}</td>
@@ -126,6 +130,7 @@ export default function EstadoCuentaReportePage() {
                     ))}
                   </tbody>
                 </table>
+                <Paginador {...pag1.props} etiqueta="movimientos" />
               </div>
             )}
           </div>

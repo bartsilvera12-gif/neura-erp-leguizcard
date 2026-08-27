@@ -7,6 +7,8 @@ import StatCard from "@/components/ui/StatCard";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import RangoFechasSelector from "@/components/reportes/RangoFechasSelector";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import Paginador from "@/components/reportes/Paginador";
+import { usePaginacion } from "@/lib/reportes/usePaginacion";
 
 type Item = {
   producto_id: string;
@@ -68,6 +70,8 @@ export default function ReporteServiciosPage() {
     };
   }, [desde, hasta]);
 
+  const pag1 = usePaginacion(items);
+
   return (
     <div className="space-y-8">
       <PageHeader
@@ -127,7 +131,7 @@ export default function ReporteServiciosPage() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((i) => (
+                {pag1.filas.map((i) => (
                   <tr key={i.producto_id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60">
                     <td className="py-2.5 pr-3">
                       <span className="font-medium text-slate-800">{i.nombre}</span>
@@ -177,6 +181,7 @@ export default function ReporteServiciosPage() {
                 ))}
               </tbody>
             </table>
+            <Paginador {...pag1.props} etiqueta="servicios" />
           </EdgeScrollArea>
         )}
         <p className="mt-4 text-[11px] text-slate-400">

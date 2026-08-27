@@ -6,6 +6,8 @@ import StatCard from "@/components/ui/StatCard";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import RangoFechasSelector from "@/components/reportes/RangoFechasSelector";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import Paginador from "@/components/reportes/Paginador";
+import { usePaginacion } from "@/lib/reportes/usePaginacion";
 
 type Item = {
   metodo_pago: string;
@@ -71,6 +73,8 @@ export default function RentabilidadMediosPage() {
     };
   }, [desde, hasta]);
 
+  const pag1 = usePaginacion(items);
+
   return (
     <div className="space-y-8">
       <PageHeader
@@ -115,7 +119,7 @@ export default function RentabilidadMediosPage() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((i, idx) => (
+                {pag1.filas.map((i, idx) => (
                   <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60">
                     <td className="py-2.5 pr-3">
                       <span className="font-medium text-slate-800">
@@ -142,6 +146,7 @@ export default function RentabilidadMediosPage() {
                 ))}
               </tbody>
             </table>
+            <Paginador {...pag1.props} etiqueta="medios de pago" />
           </EdgeScrollArea>
         )}
         <p className="mt-4 text-[11px] text-slate-400">

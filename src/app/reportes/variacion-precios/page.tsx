@@ -8,6 +8,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/ui/PageHeader";
 import { TrendingUp, Loader2, Search } from "lucide-react";
+import Paginador from "@/components/reportes/Paginador";
+import { usePaginacion } from "@/lib/reportes/usePaginacion";
 
 interface Row {
   producto_id: string; producto_nombre: string; fecha: string; numero_control: string;
@@ -51,6 +53,8 @@ export default function ReporteVariacionPreciosPage() {
 
   const q = prodFiltro.trim().toLowerCase();
   const filtrados = useMemo(() => q === "" ? items : items.filter((r) => r.producto_nombre.toLowerCase().includes(q)), [items, q]);
+
+  const pag1 = usePaginacion(filtrados);
 
   return (
     <div className="space-y-6">
@@ -104,7 +108,7 @@ export default function ReporteVariacionPreciosPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtrados.map((r, i) => (
+                {pag1.filas.map((r, i) => (
                   <tr key={i} className="hover:bg-[#4FAEB2]/[0.03]">
                     <td className="px-5 py-2.5">
                       <span className="font-medium text-slate-800">{r.producto_nombre}</span>
@@ -122,6 +126,7 @@ export default function ReporteVariacionPreciosPage() {
                 ))}
               </tbody>
             </table>
+            <Paginador {...pag1.props} etiqueta="productos" />
           </div>
         )}
       </div>

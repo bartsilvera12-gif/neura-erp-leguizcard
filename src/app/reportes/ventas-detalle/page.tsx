@@ -11,6 +11,8 @@ import ClienteBuscador from "@/components/clientes/ClienteBuscador";
 import { getClientes } from "@/lib/clientes/storage";
 import type { Cliente } from "@/lib/clientes/types";
 import { ShoppingCart, Download, Search, Loader2, ChevronRight } from "lucide-react";
+import Paginador from "@/components/reportes/Paginador";
+import { usePaginacion } from "@/lib/reportes/usePaginacion";
 
 interface VentaRow {
   id: string; numero_control: string; fecha: string; tipo_venta: string; estado: string;
@@ -103,6 +105,8 @@ export default function ReporteVentasDetallePage() {
 
   const pdfHref = useMemo(() => `/api/reportes/ventas-detalle/pdf?${params({ auto: "1", resumido: resumido ? "1" : "0", productos: pdfProductos && !resumido ? "1" : "0" }).toString()}`, [params, resumido, pdfProductos]);
   const tot = data?.totales;
+
+  const pag1 = usePaginacion(data?.ventas ?? []);
 
   return (
     <div className="space-y-6">
@@ -211,7 +215,7 @@ export default function ReporteVentasDetallePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {data.ventas.map((v) => {
+                {pag1.filas.map((v) => {
                   const anulada = v.estado === "anulada";
                   const abierta = expandida === v.id;
                   const items = itemsCache[v.id];
@@ -270,6 +274,7 @@ export default function ReporteVentasDetallePage() {
                 })}
               </tbody>
             </table>
+            <Paginador {...pag1.props} etiqueta="ventas" />
           </div>
         )}
       </div>

@@ -11,6 +11,8 @@ import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { getCajasReporte } from "@/lib/reportes/storage";
 import { mesActualAsuncion } from "@/lib/fechas/asuncion-bounds";
 import type { CajasReporte } from "@/lib/caja/types";
+import Paginador from "@/components/reportes/Paginador";
+import { usePaginacion } from "@/lib/reportes/usePaginacion";
 
 function formatGs(v: number) {
   return `Gs. ${Math.round(v).toLocaleString("es-PY")}`;
@@ -51,6 +53,8 @@ export default function CajasReportePage() {
   const t = data?.totales;
   const numerosCajas = [...new Set((data?.cajas ?? []).map((c) => c.numero_caja))].sort((a, b) => a - b);
   const cajasFiltradas = (data?.cajas ?? []).filter((c) => filtroCaja === "" || c.numero_caja === filtroCaja);
+
+  const pag = usePaginacion(cajasFiltradas);
 
   return (
     <div className="space-y-8">
@@ -117,7 +121,7 @@ export default function CajasReportePage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {cajasFiltradas.map((c) => {
+                    {pag.filas.map((c) => {
                       const dif = c.diferencia;
                       const difClass = dif == null ? "text-slate-400" : dif === 0 ? "text-emerald-600" : dif < 0 ? "text-red-600" : "text-amber-600";
                       const estadoLbl = c.estado === "cerrada" ? "Cerrada" : c.estado === "en_cierre" ? "En cierre" : "Abierta";
@@ -161,6 +165,7 @@ export default function CajasReportePage() {
                     })}
                   </tbody>
                 </table>
+                <Paginador {...pag.props} etiqueta="cajas" />
               </EdgeScrollArea>
             )}
           </div>

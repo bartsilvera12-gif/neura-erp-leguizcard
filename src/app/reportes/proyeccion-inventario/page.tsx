@@ -5,6 +5,8 @@ import PageHeader from "@/components/ui/PageHeader";
 import { getProyeccionInventario, type ProyeccionInventario } from "@/lib/reportes/storage";
 import { ESTADO_STOCK_LABEL, PROYECCION_CONFIG, type EstadoStock } from "@/lib/reportes/proyeccion";
 import { ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from "lucide-react";
+import Paginador from "@/components/reportes/Paginador";
+import { usePaginacion } from "@/lib/reportes/usePaginacion";
 
 function fmtNum(v: number, dec = 0) {
   return v.toLocaleString("es-PY", { minimumFractionDigits: dec, maximumFractionDigits: dec });
@@ -77,6 +79,8 @@ export default function ProyeccionInventarioPage() {
   const safePage = Math.min(page, totalPages);
   const fromIdx = total === 0 ? 0 : (safePage - 1) * pageSize + 1;
   const toIdx = Math.min(safePage * pageSize, total);
+
+  const pag1 = usePaginacion(data?.productos ?? []);
 
   return (
     <div className="space-y-8">
@@ -174,7 +178,7 @@ export default function ProyeccionInventarioPage() {
                 <tbody className="divide-y divide-slate-100">
                   {data.productos.length === 0 ? (
                     <tr><td colSpan={9} className="py-8 text-center text-sm text-slate-400">Sin productos para el filtro.</td></tr>
-                  ) : data.productos.map((p) => (
+                  ) : pag1.filas.map((p) => (
                     <tr key={p.producto_id} className="transition-colors hover:bg-[#4FAEB2]/5">
                       <td className="px-3 py-2.5 text-xs font-semibold text-slate-900">{p.nombre}</td>
                       <td className="px-3 py-2.5 font-mono text-xs text-slate-500">{p.sku ?? "—"}</td>
@@ -193,6 +197,7 @@ export default function ProyeccionInventarioPage() {
                   ))}
                 </tbody>
               </table>
+              <Paginador {...pag1.props} etiqueta="productos" />
             </div>
 
             <div className="mt-4 flex items-center justify-between gap-3">

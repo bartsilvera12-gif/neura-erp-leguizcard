@@ -9,6 +9,8 @@ import MesSelector from "@/components/reportes/MesSelector";
 import { getProveedoresReporte } from "@/lib/reportes/storage";
 import { mesActualAsuncion } from "@/lib/fechas/asuncion-bounds";
 import type { ProveedoresReporte } from "@/lib/reportes/types";
+import Paginador from "@/components/reportes/Paginador";
+import { usePaginacion } from "@/lib/reportes/usePaginacion";
 
 function formatGs(v: number) {
   return `Gs. ${Math.round(v).toLocaleString("es-PY")}`;
@@ -34,6 +36,8 @@ export default function ProveedoresReportePage() {
     getProveedoresReporte(mes).then((d) => { if (!cancel) { setData(d); setCargando(false); } });
     return () => { cancel = true; };
   }, [mes]);
+
+  const pag1 = usePaginacion(data?.proveedores ?? []);
 
   return (
     <div className="space-y-8">
@@ -88,7 +92,7 @@ export default function ProveedoresReportePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.proveedores.map((p) => (
+                  {pag1.filas.map((p) => (
                     <tr key={p.id} className="border-b border-slate-100 last:border-0">
                       <td className="py-3 pr-4 font-medium text-slate-800">{p.nombre}</td>
                       <td className="py-3 pr-4 font-mono text-xs text-slate-500">{p.ruc ?? "—"}</td>
@@ -103,6 +107,7 @@ export default function ProveedoresReportePage() {
                   ))}
                 </tbody>
               </table>
+              <Paginador {...pag1.props} etiqueta="proveedores" />
             </div>
           </div>
         </>

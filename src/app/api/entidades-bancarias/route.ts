@@ -45,12 +45,19 @@ export async function POST(request: NextRequest) {
     if (!nombre) return NextResponse.json(errorResponse("El nombre es obligatorio."), { status: 400 });
     const orden = Number.isFinite(Number(b.orden)) ? Math.floor(Number(b.orden)) : 0;
     try {
+      // La comision se puede fijar en el alta: crear una entidad y despues
+      // acordarse de cargarle el porcentaje es como quedan todas en cero.
+      const comisionRaw = Number(b.comision_porcentaje);
       const entidad = await insertEntidadBancaria(schema, ctx.auth.empresa_id, {
         codigo: cleanCodigo(b.codigo),
         nombre: nombre.slice(0, 120),
         tipo: normTipo(b.tipo),
         activo: b.activo === false ? false : true,
         orden,
+        comision_porcentaje:
+          b.comision_porcentaje == null || b.comision_porcentaje === "" || !Number.isFinite(comisionRaw)
+            ? null
+            : Math.min(Math.max(comisionRaw, 0), 100),
       });
       return NextResponse.json(successResponse({ entidad }));
     } catch (e) {

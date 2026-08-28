@@ -8,6 +8,7 @@ import RangoFechasSelector from "@/components/reportes/RangoFechasSelector";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import Paginador from "@/components/reportes/Paginador";
 import { usePaginacion } from "@/lib/reportes/usePaginacion";
+import ComisionesEntidades from "@/components/reportes/ComisionesEntidades";
 
 type Item = {
   metodo_pago: string;
@@ -50,6 +51,8 @@ export default function RentabilidadMediosPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [totales, setTotales] = useState<Totales | null>(null);
   const [cargando, setCargando] = useState(true);
+  /** Sube cuando se cambia una comisión: el reporte se recalcula solo. */
+  const [refresco, setRefresco] = useState(0);
 
   useEffect(() => {
     let cancel = false;
@@ -71,7 +74,7 @@ export default function RentabilidadMediosPage() {
     return () => {
       cancel = true;
     };
-  }, [desde, hasta]);
+  }, [desde, hasta, refresco]);
 
   const pag1 = usePaginacion(items);
 
@@ -86,6 +89,10 @@ export default function RentabilidadMediosPage() {
       />
 
       <RangoFechasSelector desde={desde} hasta={hasta} onChange={(r) => { setDesde(r.desde); setHasta(r.hasta); }} />
+
+      {/* La configuracion vive junto al numero que explica: si el reporte dice
+          "comision 0", el lugar para corregirlo esta a la vista. */}
+      <ComisionesEntidades onCambio={() => setRefresco((n) => n + 1)} />
 
       {totales && (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { PagoDetalleInput } from "@/lib/ventas/server/pago-detalle-pg";
 import { getUserAndEmpresa } from "@/lib/middleware/auth";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { createVentaTransaccionalPg } from "@/lib/ventas/server/create-venta-pg";
@@ -25,6 +26,71 @@ function asInsumos(raw: unknown): { insumo_producto_id: string; cantidad: number
     out.push({ insumo_producto_id: id, cantidad: cant });
   }
   return out.length ? out : null;
+}
+
+/** Metodos que acepta `ventas_pagos_detalle`. */
+const METODOS_DETALLE = new Set([
+  "efectivo", "transferencia", "tarjeta", "qr", "billetera", "saldo_favor", "otro",
+]);
+
+function texto(v: unknown): string | null {
+  const t = typeof v === "string" ? v.trim() : "";
+  return t || null;
+}
+
+/**
+ * Las lineas de cobro a guardar. Devuelve [] si no hay nada que registrar.
+ *
+ * Cobro mixto: una fila por linea. Cobro simple: una sola, por el total, con
+ * el metodo de la cabecera. Sin monto explicito se toma el total de la venta:
+ * una fila sin monto no sirve ni para conciliar ni para calcular comision.
+ */
+function asPagosDetalle(o: Record<string, unknown>, metodoPago: string, total: number): PagoDetalleInput[] {
+  const base = {
+    referencia: null as string | null,
+    titular: null as string | null,
+    fecha_acreditacion: null as string | null,
+    observacion: null as string | null,
+  };
+
+  const mixtos = Array.isArray(o.pagos) ? (o.pagos as Record<string, unknown>[]) : null;
+  if (mixtos && mixtos.length) {
+    const filas: PagoDetalleInput[] = [];
+    for (const p of mixtos) {
+      const metodo = String(p.metodo_pago ?? "");
+      const monto = Number(p.monto);
+      if (!METODOS_DETALLE.has(metodo) || !Number.isFinite(monto) || monto <= 0) continue;
+      filas.push({
+        ...base,
+        metodo_pago: metodo as PagoDetalleInput["metodo_pago"],
+        entidad_bancaria_id: texto(p.entidad_bancaria_id),
+        entidad_nombre_snapshot: texto(p.entidad_nombre_snapshot),
+        monto,
+        referencia: texto(p.referencia),
+        titular: texto(p.titular),
+      });
+    }
+    return filas;
+  }
+
+  // Mixto sin lineas no deja rastro; tampoco un metodo que la tabla no conoce.
+  if (metodoPago === "mixto" || !METODOS_DETALLE.has(metodoPago)) return [];
+
+  const d = (o.pago_detalle ?? {}) as Record<string, unknown>;
+  const montoDeclarado = Number(d.monto);
+  const monto = Number.isFinite(montoDeclarado) && montoDeclarado > 0 ? montoDeclarado : total;
+  if (!(monto > 0)) return [];
+
+  return [{
+    ...base,
+    metodo_pago: metodoPago as PagoDetalleInput["metodo_pago"],
+    entidad_bancaria_id: texto(d.entidad_bancaria_id),
+    entidad_nombre_snapshot: texto(d.entidad_nombre_snapshot),
+    monto,
+    referencia: texto(d.referencia),
+    titular: texto(d.titular),
+    observacion: texto(d.observacion),
+  }];
 }
 
 function asItems(body: unknown): CreateVentaItemInput[] | null {
@@ -266,6 +332,21 @@ export async function POST(request: NextRequest) {
       cajaId: typeof o.caja_id === "string" && o.caja_id.trim() ? o.caja_id.trim() : null,
       vehiculos,
     });
+
+    // Detalle del cobro: con que se pago, por cuanto y en que entidad. De aca
+    // salen la conciliacion bancaria, la comision del POS y el seguimiento de
+    // las ventas con tarjeta. Best-effort, igual que el odometro.
+    const pagosDetalle = asPagosDetalle(o, metodoPago, totalDeclarado);
+    if (pagosDetalle.length) {
+      try {
+        const { insertVentaPagoDetalle } = await import("@/lib/ventas/server/pago-detalle-pg");
+        for (const p of pagosDetalle) {
+          await insertVentaPagoDetalle(schema, auth.empresa_id, ventaId, p);
+        }
+      } catch (e) {
+        console.warn("[/api/ventas/create] detalle de cobro:", e instanceof Error ? e.message : e);
+      }
+    }
 
     // El odómetro de cada vehículo avanza con la venta. Best-effort: si falla,
     // la venta ya está registrada y no se la tira por esto.

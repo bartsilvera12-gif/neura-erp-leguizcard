@@ -44,6 +44,8 @@ export interface EntidadBancariaInput {
   tipo: TipoEntidad;
   activo: boolean;
   orden: number;
+  /** Lo que retiene el POS o el banco, en PORCENTAJE. NULL = no retiene nada. */
+  comision_porcentaje?: number | null;
 }
 
 const ENT_COLS = "id, codigo, nombre, tipo, activo, orden, comision_porcentaje";
@@ -76,10 +78,10 @@ export async function insertEntidadBancaria(
   const schema = assertAllowedChatDataSchema(schemaRaw);
   const t = quoteSchemaTable(schema, "entidades_bancarias");
   const { rows } = await pool().query<EntidadBancariaRow>(
-    `INSERT INTO ${t} (empresa_id, codigo, nombre, tipo, activo, orden)
-     VALUES ($1::uuid, $2, $3, $4, $5::boolean, $6::int)
+    `INSERT INTO ${t} (empresa_id, codigo, nombre, tipo, activo, orden, comision_porcentaje)
+     VALUES ($1::uuid, $2, $3, $4, $5::boolean, $6::int, $7::numeric)
      RETURNING ${ENT_COLS}`,
-    [empresaId, d.codigo, d.nombre, d.tipo, d.activo, d.orden]
+    [empresaId, d.codigo, d.nombre, d.tipo, d.activo, d.orden, d.comision_porcentaje ?? null]
   );
   return rows[0];
 }

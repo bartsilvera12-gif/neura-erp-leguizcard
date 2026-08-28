@@ -2,15 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
+import type { AppSupabaseClient } from "@/lib/supabase/schema";
 
 /**
  * GET /api/alertas — lo que necesita atencion ahora.
  * POST /api/alertas — marca una alerta como leida.
  * DELETE /api/alertas — la desmarca.
  *
- * Hoy trae reposicion de stock. La respuesta es una lista de alertas con un
- * `tipo`, para que sumar otra clase (mantenimientos vencidos, por ejemplo) no
- * obligue a cambiar ni la campanita ni este contrato.
+ * Trae dos clases de alerta, cada una con su `tipo`:
+ *   - "stock":    productos por debajo de su minimo.
+ *   - "inactivo": autos que pasaron su plazo sin volver al taller.
+ *
+ * El `tipo` existe justamente para poder sumar clases sin cambiar ni la
+ * campanita ni este contrato.
  *
  * Cuenta y detalle salen del MISMO pedido: la campanita muestra el numero y el
  * panel muestra las filas, y si fueran dos consultas podrian discrepar.
@@ -34,8 +38,120 @@ export interface AlertaStock {
   leida: boolean;
 }
 
+/** Un auto que hace rato no aparece por el taller. */
+export interface AlertaInactivo {
+  tipo: "inactivo";
+  nivel: "critico" | "aviso";
+  vehiculo_id: string;
+  titulo: string;
+  detalle: string;
+  href: string;
+  leida: boolean;
+}
+
+export type Alerta = AlertaStock | AlertaInactivo;
+
 /** Cuantas filas se devuelven. Arriba de esto, el panel invita al reporte. */
 const LIMITE = 30;
+
+/** Dias sin venir por defecto, cuando el vehiculo no define los suyos. */
+const DIAS_INACTIVO_DEFECTO = 90;
+
+/**
+ * Autos que pasaron su plazo sin venir.
+ *
+ * El plazo lo define cada vehiculo; sin valor, 90 dias. En 0 no avisa nunca:
+ * hay autos que vienen una vez al año y tenerlos siempre en rojo hace que se
+ * deje de mirar la campanita.
+ *
+ * Un auto que NUNCA vino no entra: no es un cliente que se perdio, es uno que
+ * todavia no atendimos, y eso no se arregla llamandolo.
+ */
+async function alertasInactivos(
+  supabase: AppSupabaseClient,
+  empresaId: string
+): Promise<{ vehiculo_id: string; patente: string; nombre: string; dias: number; plazo: number }[]> {
+  const vehQ = await supabase
+    .from("vehiculos")
+    .select("id, patente, marca, modelo, avisar_inactivo_dias, cliente_id, activo")
+    .eq("empresa_id", empresaId)
+    .eq("activo", true);
+  if (vehQ.error) throw new Error(vehQ.error.message);
+  const vehiculos = (vehQ.data ?? []) as unknown as Record<string, unknown>[];
+  if (!vehiculos.length) return [];
+
+  // Ultima visita de cada auto: la venta mas reciente que lo incluyo.
+  const vvQ = await supabase
+    .from("ventas_vehiculos")
+    .select("vehiculo_id, venta_id")
+    .eq("empresa_id", empresaId);
+  if (vvQ.error) throw new Error(vvQ.error.message);
+  const vvRows = (vvQ.data ?? []) as unknown as Record<string, unknown>[];
+
+  const ventaIds = [...new Set(vvRows.map((r) => String(r.venta_id)))];
+  const fechaVenta = new Map<string, string>();
+  if (ventaIds.length) {
+    const venQ = await supabase
+      .from("ventas")
+      .select("id, fecha, estado")
+      .eq("empresa_id", empresaId)
+      .in("id", ventaIds);
+    if (venQ.error) throw new Error(venQ.error.message);
+    for (const v of (venQ.data ?? []) as unknown as Record<string, unknown>[]) {
+      // Una venta anulada no es una visita.
+      if (v.estado === "anulada") continue;
+      fechaVenta.set(String(v.id), String(v.fecha));
+    }
+  }
+
+  const ultima = new Map<string, string>();
+  for (const r of vvRows) {
+    const f = fechaVenta.get(String(r.venta_id));
+    if (!f) continue;
+    const id = String(r.vehiculo_id);
+    const prev = ultima.get(id);
+    if (!prev || f > prev) ultima.set(id, f);
+  }
+
+  const nombreCli = new Map<string, string>();
+  const idsCli = [...new Set(vehiculos.map((v) => v.cliente_id).filter(Boolean))].map(String);
+  if (idsCli.length) {
+    const cliQ = await supabase
+      .from("clientes")
+      .select("id, nombre, nombre_contacto, empresa, tipo_cliente")
+      .eq("empresa_id", empresaId)
+      .in("id", idsCli);
+    for (const c of (cliQ.data ?? []) as unknown as Record<string, unknown>[]) {
+      const empresaNom = String(c.empresa ?? "").trim();
+      const contacto = String(c.nombre_contacto ?? "").trim();
+      const nombre = String(c.nombre ?? "").trim();
+      const elegido = (c.tipo_cliente === "empresa" && empresaNom) || contacto || nombre || "";
+      if (elegido) nombreCli.set(String(c.id), elegido);
+    }
+  }
+
+  const ahora = Date.now();
+  const salida: { vehiculo_id: string; patente: string; nombre: string; dias: number; plazo: number }[] = [];
+  for (const v of vehiculos) {
+    const id = String(v.id);
+    const plazo = v.avisar_inactivo_dias == null ? DIAS_INACTIVO_DEFECTO : Number(v.avisar_inactivo_dias);
+    if (!(plazo > 0)) continue;
+    const f = ultima.get(id);
+    if (!f) continue;
+    const dias = Math.floor((ahora - new Date(f).getTime()) / 86400000);
+    if (dias < plazo) continue;
+    const desc = [v.marca, v.modelo].filter(Boolean).join(" ").trim();
+    salida.push({
+      vehiculo_id: id,
+      patente: String(v.patente ?? ""),
+      nombre: nombreCli.get(String(v.cliente_id)) || desc || "Sin cliente",
+      dias,
+      plazo,
+    });
+  }
+  // Primero el que hace mas que no viene.
+  return salida.sort((a, b) => b.dias - a.dias);
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -100,7 +216,7 @@ export async function GET(request: NextRequest) {
       ...bajos.filter((x) => estaLeida(String(x.p.id), x.stock, x.minimo)),
     ];
 
-    const alertas: AlertaStock[] = ordenadas.slice(0, LIMITE).map(({ p, stock, minimo, falta }) => {
+    const alertasStock: AlertaStock[] = ordenadas.slice(0, LIMITE).map(({ p, stock, minimo, falta }) => {
       const unidad = String(p.unidad_medida ?? "").toUpperCase();
       const u = !unidad || unidad === "UNIDAD" ? "" : ` ${unidad === "LITRO" ? "L" : unidad}`;
       return {
@@ -117,14 +233,40 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    // Autos que no vuelven. Si esto falla, la campanita sigue mostrando el
+    // stock: media alerta es mejor que ninguna.
+    let inactivos: Awaited<ReturnType<typeof alertasInactivos>> = [];
+    try {
+      inactivos = await alertasInactivos(ctx.supabase, empresaId);
+    } catch (e) {
+      console.warn("[/api/alertas] inactivos:", e instanceof Error ? e.message : e);
+    }
+
+    const alertasInactivas: AlertaInactivo[] = inactivos.slice(0, LIMITE).map((v) => ({
+      tipo: "inactivo",
+      // Al doble del plazo ya no es "se esta demorando": se perdio.
+      nivel: v.dias >= v.plazo * 2 ? "critico" : "aviso",
+      vehiculo_id: v.vehiculo_id,
+      titulo: `${v.patente} · ${v.nombre}`,
+      detalle: `Hace ${v.dias} días que no viene · avisar a los ${v.plazo}`,
+      href: `/vehiculos/${v.vehiculo_id}`,
+      // Marcar como leido hoy es solo para stock; un auto que no vuelve deja de
+      // avisar solo cuando vuelve.
+      leida: false,
+    }));
+
     return NextResponse.json(
       successResponse({
         // El numero de la campanita cuenta lo que falta ver, no el total: si
         // contara todo, marcar como leido no serviria de nada.
-        total: sinLeer.length,
-        totalBajos: bajos.length,
-        criticos: sinLeer.filter((x) => x.stock <= 0).length,
-        alertas,
+        total: sinLeer.length + alertasInactivas.length,
+        totalBajos: bajos.length + alertasInactivas.length,
+        criticos:
+          sinLeer.filter((x) => x.stock <= 0).length +
+          alertasInactivas.filter((a) => a.nivel === "critico").length,
+        // Primero los autos: un cliente que se va no vuelve solo, y un producto
+        // que falta se repone cuando llega el pedido.
+        alertas: [...alertasInactivas, ...alertasStock],
       })
     );
   } catch (err) {

@@ -6,7 +6,10 @@
  * siguiente por kilometraje y/o por tiempo. Vence por lo que ocurra primero.
  *
  * Se apoya en:
- *   - productos.servicio_intervalo_km / servicio_intervalo_meses (el intervalo)
+ *   - productos.servicio_intervalo_km / servicio_intervalo_meses (el intervalo
+ *     por defecto del servicio)
+ *   - vehiculos.intervalo_km / intervalo_meses (la excepcion de ESE auto, que
+ *     pisa la del servicio cuando esta cargada)
  *   - ventas.vehiculo_id + ventas.km_registrado (cuando y con cuantos km se hizo)
  *   - vehiculos.km_actual (cuanto tiene hoy)
  *
@@ -55,26 +58,35 @@ export interface ProximoServicioRow {
  * contestar distinto a "cuanto me falta" para el mismo auto.
  *
  * Referencian los alias s (servicio), u (ultima vez que se hizo) y veh.
+ *
+ * EL INTERVALO SALE DEL AUTO SI LO TIENE. El servicio trae el valor por
+ * defecto ("cambio de aceite: cada 5.000 km") y el vehiculo lo pisa cuando
+ * corresponde: la misma camioneta haciendo taxi va cada 5.000 y la de uso
+ * particular aguanta 10.000. Definido una vez y usado en las cinco reglas,
+ * para que no exista una que se olvide de mirar el auto.
  */
-const SQL_PROXIMO_KM = `CASE WHEN s.servicio_intervalo_km IS NOT NULL AND u.ultimo_km IS NOT NULL
-           THEN u.ultimo_km + s.servicio_intervalo_km END`;
+const KM = `COALESCE(veh.intervalo_km, s.servicio_intervalo_km)`;
+const MESES = `COALESCE(veh.intervalo_meses, s.servicio_intervalo_meses)`;
 
-const SQL_PROXIMA_FECHA = `CASE WHEN s.servicio_intervalo_meses IS NOT NULL
-           THEN u.ultima_fecha + (s.servicio_intervalo_meses || ' months')::interval END`;
+const SQL_PROXIMO_KM = `CASE WHEN ${KM} IS NOT NULL AND u.ultimo_km IS NOT NULL
+           THEN u.ultimo_km + ${KM} END`;
 
-const SQL_KM_RESTANTES = `CASE WHEN s.servicio_intervalo_km IS NOT NULL AND u.ultimo_km IS NOT NULL AND veh.km_actual IS NOT NULL
-           THEN (u.ultimo_km + s.servicio_intervalo_km) - veh.km_actual END`;
+const SQL_PROXIMA_FECHA = `CASE WHEN ${MESES} IS NOT NULL
+           THEN u.ultima_fecha + (${MESES} || ' months')::interval END`;
 
-const SQL_DIAS_RESTANTES = `CASE WHEN s.servicio_intervalo_meses IS NOT NULL
-           THEN EXTRACT(DAY FROM (u.ultima_fecha + (s.servicio_intervalo_meses || ' months')::interval) - now())::int END`;
+const SQL_KM_RESTANTES = `CASE WHEN ${KM} IS NOT NULL AND u.ultimo_km IS NOT NULL AND veh.km_actual IS NOT NULL
+           THEN (u.ultimo_km + ${KM}) - veh.km_actual END`;
+
+const SQL_DIAS_RESTANTES = `CASE WHEN ${MESES} IS NOT NULL
+           THEN EXTRACT(DAY FROM (u.ultima_fecha + (${MESES} || ' months')::interval) - now())::int END`;
 
 /** Vencido por km, o por tiempo. Vence por lo que ocurra primero. */
 const SQL_VENCIDO = `(
-        (s.servicio_intervalo_km IS NOT NULL AND u.ultimo_km IS NOT NULL AND veh.km_actual IS NOT NULL
-         AND veh.km_actual >= u.ultimo_km + s.servicio_intervalo_km)
+        (${KM} IS NOT NULL AND u.ultimo_km IS NOT NULL AND veh.km_actual IS NOT NULL
+         AND veh.km_actual >= u.ultimo_km + ${KM})
         OR
-        (s.servicio_intervalo_meses IS NOT NULL
-         AND now() >= u.ultima_fecha + (s.servicio_intervalo_meses || ' months')::interval)
+        (${MESES} IS NOT NULL
+         AND now() >= u.ultima_fecha + (${MESES} || ' months')::interval)
       )`;
 
 /**
@@ -165,8 +177,9 @@ export async function listProximosServicios(
       veh.km_actual,
       s.id::text                  AS producto_id,
       s.nombre                    AS servicio_nombre,
-      s.servicio_intervalo_km     AS intervalo_km,
-      s.servicio_intervalo_meses  AS intervalo_meses,
+      -- El intervalo que se muestra es el que se APLICO, no el del catalogo.
+      COALESCE(veh.intervalo_km, s.servicio_intervalo_km)       AS intervalo_km,
+      COALESCE(veh.intervalo_meses, s.servicio_intervalo_meses) AS intervalo_meses,
       u.ultima_fecha,
       u.ultimo_km,
       ${SQL_PROXIMO_KM}    AS proximo_km,
@@ -186,12 +199,12 @@ export async function listProximosServicios(
            -- ...o por vencer dentro de la ventana de aviso.
            $3::boolean = false
            AND (
-             (s.servicio_intervalo_meses IS NOT NULL
-              AND u.ultima_fecha + (s.servicio_intervalo_meses || ' months')::interval <= now() + ($2 || ' days')::interval)
+             (${MESES} IS NOT NULL
+              AND u.ultima_fecha + (${MESES} || ' months')::interval <= now() + ($2 || ' days')::interval)
              OR
              -- Anticipacion por km: 10% del intervalo.
-             (s.servicio_intervalo_km IS NOT NULL AND u.ultimo_km IS NOT NULL AND veh.km_actual IS NOT NULL
-              AND veh.km_actual >= u.ultimo_km + s.servicio_intervalo_km * 0.9)
+             (${KM} IS NOT NULL AND u.ultimo_km IS NOT NULL AND veh.km_actual IS NOT NULL
+              AND veh.km_actual >= u.ultimo_km + ${KM} * 0.9)
            )
          )
        )
@@ -246,8 +259,8 @@ export async function listEstadoServiciosDeVehiculo(
     SELECT
       s.id::text                 AS producto_id,
       s.nombre                   AS servicio_nombre,
-      s.servicio_intervalo_km    AS intervalo_km,
-      s.servicio_intervalo_meses AS intervalo_meses,
+      COALESCE(veh.intervalo_km, s.servicio_intervalo_km)       AS intervalo_km,
+      COALESCE(veh.intervalo_meses, s.servicio_intervalo_meses) AS intervalo_meses,
       u.ultima_fecha,
       u.ultimo_km,
       ${SQL_PROXIMO_KM}     AS proximo_km,

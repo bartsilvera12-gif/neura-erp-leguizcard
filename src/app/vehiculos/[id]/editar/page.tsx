@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertTriangle, Car, Droplet, Gauge, Loader2, Trash2 } from "lucide-react";
+import { AlertTriangle, Car, Droplet, Gauge, Loader2, Trash2, RotateCcw } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
 import { FancySelect } from "@/components/ui/FancySelect";
 import FotoVehiculo from "@/components/vehiculos/FotoVehiculo";
@@ -80,6 +80,10 @@ export default function EditarVehiculoPage({ params }: { params: Promise<{ id: s
   const [km, setKm] = useState("");
   const [aceiteTipo, setAceiteTipo] = useState("");
   const [aceiteLitros, setAceiteLitros] = useState("");
+  // Excepciones de ESTE auto. Vacío = manda lo que diga el servicio.
+  const [intervaloKm, setIntervaloKm] = useState("");
+  const [intervaloMeses, setIntervaloMeses] = useState("");
+  const [avisarDias, setAvisarDias] = useState("");
   const [observaciones, setObservaciones] = useState("");
   const [imagenUrl, setImagenUrl] = useState<string | null>(null);
 
@@ -109,6 +113,9 @@ export default function EditarVehiculoPage({ params }: { params: Promise<{ id: s
       setKmFecha(v.km_actualizado_at);
       setAceiteTipo(v.aceite_tipo ?? "");
       setAceiteLitros(v.aceite_litros != null ? String(v.aceite_litros) : "");
+      setIntervaloKm(v.intervalo_km != null ? String(Math.round(v.intervalo_km)) : "");
+      setIntervaloMeses(v.intervalo_meses != null ? String(v.intervalo_meses) : "");
+      setAvisarDias(v.avisar_inactivo_dias != null ? String(v.avisar_inactivo_dias) : "");
       setObservaciones(v.observaciones ?? "");
       setImagenUrl(v.imagen_url ?? null);
       setActivo(v.activo);
@@ -149,6 +156,9 @@ export default function EditarVehiculoPage({ params }: { params: Promise<{ id: s
       km_actual: km.trim() === "" ? null : Number(km),
       aceite_tipo: aceiteTipo.trim() || null,
       aceite_litros: aceiteLitros ? Number(aceiteLitros) : null,
+      intervalo_km: intervaloKm ? Number(intervaloKm) : null,
+      intervalo_meses: intervaloMeses ? Number(intervaloMeses) : null,
+      avisar_inactivo_dias: avisarDias === "" ? null : Number(avisarDias),
       observaciones: observaciones.trim() || null,
     });
     setGuardando(false);
@@ -355,6 +365,63 @@ export default function EditarVehiculoPage({ params }: { params: Promise<{ id: s
                 placeholder="7.5"
                 className={`${INPUT} tabular-nums`}
               />
+            </div>
+          </div>
+        </Bloque>
+
+        {/* El servicio ya trae su intervalo ("cambio de aceite: cada 5.000 km").
+            Acá se lo pisa cuando este auto va distinto: la misma camioneta
+            haciendo taxi va cada 5.000 y la particular aguanta 10.000. */}
+        <Bloque
+          icono={<RotateCcw className="h-4 w-4" />}
+          titulo="Mantenimiento y avisos"
+          ayuda="Solo si este auto va distinto a lo normal. Vacío = usa lo que dice cada servicio."
+        >
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div>
+              <label className={LABEL} htmlFor="intervalo_km">Cada cuántos km</label>
+              <input
+                id="intervalo_km"
+                type="number"
+                min={0}
+                step="500"
+                value={intervaloKm}
+                onChange={(e) => setIntervaloKm(e.target.value)}
+                placeholder="5000"
+                className={`${INPUT} tabular-nums`}
+              />
+            </div>
+            <div>
+              <label className={LABEL} htmlFor="intervalo_meses">Cada cuántos meses</label>
+              <input
+                id="intervalo_meses"
+                type="number"
+                min={0}
+                max={120}
+                value={intervaloMeses}
+                onChange={(e) => setIntervaloMeses(e.target.value)}
+                placeholder="6"
+                className={`${INPUT} tabular-nums`}
+              />
+            </div>
+            <div>
+              <label className={LABEL} htmlFor="avisar_dias">Avisar si no viene en</label>
+              <select
+                id="avisar_dias"
+                value={avisarDias}
+                onChange={(e) => setAvisarDias(e.target.value)}
+                className={INPUT}
+              >
+                <option value="">90 días (por defecto)</option>
+                <option value="15">15 días</option>
+                <option value="30">1 mes</option>
+                <option value="60">2 meses</option>
+                <option value="90">3 meses</option>
+                <option value="120">4 meses</option>
+                <option value="180">6 meses</option>
+                <option value="365">1 año</option>
+                <option value="0">No avisar por este auto</option>
+              </select>
             </div>
           </div>
         </Bloque>

@@ -22,6 +22,18 @@ import {
   type EstadoServicioVehiculo,
 } from "@/lib/vehiculos/types";
 
+/**
+ * Numero opcional dentro de un rango. `undefined` = el valor no sirve, y el
+ * caller responde 400 con un mensaje entendible en vez de dejar que reviente
+ * el CHECK de Postgres.
+ */
+function numeroEnRango(v: unknown, min: number, max: number): number | null | undefined {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < min || n > max) return undefined;
+  return n;
+}
+
 function txt(v: unknown): string | null {
   if (v == null) return null;
   const s = String(v).trim();
@@ -145,6 +157,30 @@ export async function PATCH(request: NextRequest, ctxParams: { params: Promise<{
         return NextResponse.json(errorResponse("Litros de aceite inválidos."), { status: 400 });
       }
       patch.aceite_litros = l;
+    }
+
+    // Periodicidad propia del auto: pisa la del servicio. Vacío = usa la del
+    // servicio, que es como venia funcionando.
+    if (o.intervalo_km !== undefined) {
+      const v = numeroEnRango(o.intervalo_km, 1, 200000);
+      if (v === undefined) {
+        return NextResponse.json(errorResponse("Intervalo en km inválido."), { status: 400 });
+      }
+      patch.intervalo_km = v;
+    }
+    if (o.intervalo_meses !== undefined) {
+      const v = numeroEnRango(o.intervalo_meses, 1, 120);
+      if (v === undefined) {
+        return NextResponse.json(errorResponse("Intervalo en meses inválido."), { status: 400 });
+      }
+      patch.intervalo_meses = v;
+    }
+    if (o.avisar_inactivo_dias !== undefined) {
+      const v = numeroEnRango(o.avisar_inactivo_dias, 0, 3650);
+      if (v === undefined) {
+        return NextResponse.json(errorResponse("Días de aviso inválidos."), { status: 400 });
+      }
+      patch.avisar_inactivo_dias = v;
     }
 
     if (o.anio !== undefined) {

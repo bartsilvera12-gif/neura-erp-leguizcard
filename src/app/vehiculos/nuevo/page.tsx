@@ -31,6 +31,10 @@ export default function NuevoVehiculoPage() {
   const [km, setKm] = useState("");
   const [aceiteTipo, setAceiteTipo] = useState("");
   const [aceiteLitros, setAceiteLitros] = useState("");
+  // Excepciones de ESTE auto. Vacío = manda lo que diga el servicio.
+  const [intervaloKm, setIntervaloKm] = useState("");
+  const [intervaloMeses, setIntervaloMeses] = useState("");
+  const [avisarDias, setAvisarDias] = useState("");
   const [observaciones, setObservaciones] = useState("");
 
   useEffect(() => {
@@ -65,6 +69,9 @@ export default function NuevoVehiculoPage() {
       km_actual: km ? Number(km) : null,
       aceite_tipo: aceiteTipo.trim() || null,
       aceite_litros: aceiteLitros ? Number(aceiteLitros) : null,
+      intervalo_km: intervaloKm ? Number(intervaloKm) : null,
+      intervalo_meses: intervaloMeses ? Number(intervaloMeses) : null,
+      avisar_inactivo_dias: avisarDias === "" ? null : Number(avisarDias),
       observaciones: observaciones.trim() || null,
     });
     setGuardando(false);
@@ -209,6 +216,65 @@ export default function NuevoVehiculoPage() {
                     placeholder="7"
                     className={INPUT}
                   />
+                </div>
+              </div>
+            </div>
+
+            {/* ── Mantenimiento de ESTE auto ────────────────────────────────
+                El servicio ya trae su intervalo ("cambio de aceite: cada 5.000
+                km"). Acá se lo pisa cuando este auto va distinto: la misma
+                camioneta haciendo taxi va cada 5.000 y la particular aguanta
+                10.000. Vacío = manda el del servicio. */}
+            <div className="sm:col-span-2 rounded-xl border border-slate-200 p-4">
+              <p className="text-sm font-semibold text-slate-700">Mantenimiento y avisos</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
+                Solo si este auto va distinto a lo normal. Vacío = usa lo que dice cada servicio.
+              </p>
+              <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div>
+                  <label className={LABEL} htmlFor="intervalo_km">Cada cuántos km</label>
+                  <input
+                    id="intervalo_km"
+                    type="number"
+                    min={0}
+                    step="500"
+                    value={intervaloKm}
+                    onChange={(e) => setIntervaloKm(e.target.value)}
+                    placeholder="5000"
+                    className={INPUT}
+                  />
+                </div>
+                <div>
+                  <label className={LABEL} htmlFor="intervalo_meses">Cada cuántos meses</label>
+                  <input
+                    id="intervalo_meses"
+                    type="number"
+                    min={0}
+                    max={120}
+                    value={intervaloMeses}
+                    onChange={(e) => setIntervaloMeses(e.target.value)}
+                    placeholder="6"
+                    className={INPUT}
+                  />
+                </div>
+                <div>
+                  <label className={LABEL} htmlFor="avisar_dias">Avisar si no viene en</label>
+                  <select
+                    id="avisar_dias"
+                    value={avisarDias}
+                    onChange={(e) => setAvisarDias(e.target.value)}
+                    className={INPUT}
+                  >
+                    <option value="">90 días (por defecto)</option>
+                    <option value="15">15 días</option>
+                    <option value="30">1 mes</option>
+                    <option value="60">2 meses</option>
+                    <option value="90">3 meses</option>
+                    <option value="120">4 meses</option>
+                    <option value="180">6 meses</option>
+                    <option value="365">1 año</option>
+                    <option value="0">No avisar por este auto</option>
+                  </select>
                 </div>
               </div>
             </div>

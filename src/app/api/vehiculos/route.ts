@@ -37,11 +37,26 @@ export function mapVehiculoRow(r: VehiculoRow): Vehiculo {
     ultima_visita: r.ultima_visita,
     aceite_tipo: r.aceite_tipo,
     aceite_litros: r.aceite_litros != null ? Number(r.aceite_litros) : null,
+    intervalo_km: r.intervalo_km != null ? Number(r.intervalo_km) : null,
+    intervalo_meses: r.intervalo_meses != null ? Number(r.intervalo_meses) : null,
+    avisar_inactivo_dias: r.avisar_inactivo_dias != null ? Number(r.avisar_inactivo_dias) : null,
     observaciones: r.observaciones,
     activo: Boolean(r.activo),
     created_at: r.created_at,
     updated_at: r.updated_at,
   };
+}
+
+/**
+ * Numero opcional dentro de un rango. Devuelve `undefined` si el valor no es
+ * valido, para que el caller responda 400 con un mensaje entendible en vez de
+ * dejar que reviente el CHECK de Postgres.
+ */
+function numeroEnRango(v: unknown, min: number, max: number): number | null | undefined {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < min || n > max) return undefined;
+  return n;
 }
 
 /** Texto normalizado o null si viene vacio. */
@@ -135,6 +150,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(errorResponse("Combustible inválido."), { status: 400 });
     }
 
+    // Periodicidad propia del auto y aviso de inactividad. Los rangos son los
+    // mismos que los CHECK de la tabla.
+    const intervaloKm = numeroEnRango(o.intervalo_km, 1, 200000);
+    if (intervaloKm === undefined) {
+      return NextResponse.json(errorResponse("Intervalo en km inválido."), { status: 400 });
+    }
+    const intervaloMeses = numeroEnRango(o.intervalo_meses, 1, 120);
+    if (intervaloMeses === undefined) {
+      return NextResponse.json(errorResponse("Intervalo en meses inválido."), { status: 400 });
+    }
+    const avisarDias = numeroEnRango(o.avisar_inactivo_dias, 0, 3650);
+    if (avisarDias === undefined) {
+      return NextResponse.json(errorResponse("Días de aviso inválidos."), { status: 400 });
+    }
+
     const creado = await insertVehiculo(
       schema,
       ctx.auth.empresa_id,
@@ -151,6 +181,9 @@ export async function POST(request: NextRequest) {
         km_actual: km,
         aceite_tipo: txt(o.aceite_tipo),
         aceite_litros: litros,
+        intervalo_km: intervaloKm,
+        intervalo_meses: intervaloMeses,
+        avisar_inactivo_dias: avisarDias,
         observaciones: txt(o.observaciones),
         activo: o.activo === undefined ? true : Boolean(o.activo),
       },

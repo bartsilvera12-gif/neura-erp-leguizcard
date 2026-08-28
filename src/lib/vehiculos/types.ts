@@ -42,6 +42,15 @@ export interface Vehiculo {
   /** Cuantos litros lleva un cambio completo. */
   aceite_litros: number | null;
   /**
+   * Cada cuanto le toca a ESTE auto, pisando el intervalo del servicio.
+   * null = manda el del servicio. Existe porque la misma camioneta haciendo
+   * taxi va cada 5.000 km y la de uso particular aguanta 10.000.
+   */
+  intervalo_km: number | null;
+  intervalo_meses: number | null;
+  /** Dias sin venir antes de avisar. null = 90. 0 = este auto no avisa. */
+  avisar_inactivo_dias: number | null;
+  /**
    * URL FIRMADA de la foto, con vencimiento. No se guarda en la base: se firma
    * al leer, porque el bucket es privado. null = sin foto.
    */
@@ -67,6 +76,9 @@ export interface NuevoVehiculoInput {
   km_actual?: number | null;
   aceite_tipo?: string | null;
   aceite_litros?: number | null;
+  intervalo_km?: number | null;
+  intervalo_meses?: number | null;
+  avisar_inactivo_dias?: number | null;
   observaciones?: string | null;
   activo?: boolean;
 }

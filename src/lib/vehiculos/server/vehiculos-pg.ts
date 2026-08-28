@@ -31,6 +31,9 @@ export interface VehiculoRow {
   km_actualizado_at: string | null;
   aceite_tipo: string | null;
   aceite_litros: string | number | null;
+  intervalo_km: string | number | null;
+  intervalo_meses: number | null;
+  avisar_inactivo_dias: number | null;
   imagen_path: string | null;
   ultima_visita: string | null;
   observaciones: string | null;
@@ -49,6 +52,7 @@ const COLS = `v.id::text AS id, v.empresa_id::text AS empresa_id, v.cliente_id::
               ) AS cliente_nombre,
               v.patente, v.marca, v.modelo, v.anio, v.motor, v.combustible, v.vin, v.color,
               v.km_actual, v.km_actualizado_at, v.aceite_tipo, v.aceite_litros,
+              v.intervalo_km, v.intervalo_meses, v.avisar_inactivo_dias,
               v.imagen_path, v.observaciones, v.activo, v.created_at, v.updated_at`;
 
 /**
@@ -137,6 +141,9 @@ export interface VehiculoInput {
   km_actual?: number | null;
   aceite_tipo?: string | null;
   aceite_litros?: number | null;
+  intervalo_km?: number | null;
+  intervalo_meses?: number | null;
+  avisar_inactivo_dias?: number | null;
   observaciones?: string | null;
   activo?: boolean;
 }
@@ -153,9 +160,11 @@ export async function insertVehiculo(
     `INSERT INTO ${t}
        (empresa_id, cliente_id, patente, marca, modelo, anio, motor, combustible,
         vin, color, km_actual, km_actualizado_at, aceite_tipo, aceite_litros,
+        intervalo_km, intervalo_meses, avisar_inactivo_dias,
         observaciones, activo, created_by)
      VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-             CASE WHEN $11::numeric IS NULL THEN NULL ELSE now() END, $12, $13, $14, $15, $16::uuid)
+             CASE WHEN $11::numeric IS NULL THEN NULL ELSE now() END, $12, $13,
+             $14::numeric, $15::int, $16::int, $17, $18, $19::uuid)
      RETURNING id::text AS id`,
     [
       empresaId,
@@ -171,6 +180,9 @@ export async function insertVehiculo(
       d.km_actual ?? null,
       d.aceite_tipo ?? null,
       d.aceite_litros ?? null,
+      d.intervalo_km ?? null,
+      d.intervalo_meses ?? null,
+      d.avisar_inactivo_dias ?? null,
       d.observaciones ?? null,
       d.activo ?? true,
       createdBy,
@@ -208,6 +220,9 @@ export async function updateVehiculo(
   if (d.color !== undefined) push("color", d.color);
   if (d.aceite_tipo !== undefined) push("aceite_tipo", d.aceite_tipo);
   if (d.aceite_litros !== undefined) push("aceite_litros", d.aceite_litros);
+  if (d.intervalo_km !== undefined) push("intervalo_km", d.intervalo_km);
+  if (d.intervalo_meses !== undefined) push("intervalo_meses", d.intervalo_meses);
+  if (d.avisar_inactivo_dias !== undefined) push("avisar_inactivo_dias", d.avisar_inactivo_dias);
   if (d.observaciones !== undefined) push("observaciones", d.observaciones);
   if (d.activo !== undefined) push("activo", d.activo);
   if (d.km_actual !== undefined) {

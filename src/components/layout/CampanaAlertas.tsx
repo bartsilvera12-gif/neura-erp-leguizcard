@@ -4,7 +4,8 @@
  * Campanita de alertas.
  *
  * Antes mostraba un "0" escrito a mano y no hacia nada. Ahora trae lo que
- * necesita atencion: por ahora, productos que cayeron por debajo de su minimo.
+ * necesita atencion: productos por debajo de su minimo, y autos que pasaron su
+ * plazo sin volver al taller.
  *
  * El numero y el detalle salen del mismo pedido, asi no pueden discrepar.
  * Se refresca solo cada 5 minutos y al volver a la pestana: una venta baja el
@@ -21,18 +22,24 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Bell, Check, Loader2, PackageX, Undo2 } from "lucide-react";
+import { AlertTriangle, Bell, CarFront, Check, Loader2, PackageX, Undo2 } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 
 type Alerta = {
+  /** "stock" = reposicion; "inactivo" = auto que no vuelve. */
   tipo: string;
   nivel: "critico" | "aviso";
-  producto_id: string;
+  /** Presente solo en las de stock; es la clave para marcarlas leidas. */
+  producto_id?: string;
+  vehiculo_id?: string;
   titulo: string;
   detalle: string;
   href: string;
   leida: boolean;
 };
+
+/** Clave estable de una alerta, sea del tipo que sea. */
+const claveAlerta = (a: Alerta) => `${a.tipo}:${a.producto_id ?? a.vehiculo_id ?? a.titulo}`;
 
 /** Cada cuanto se vuelve a preguntar. Cinco minutos: el stock no cambia solo. */
 const REFRESCO_MS = 5 * 60 * 1000;
@@ -96,6 +103,7 @@ export default function CampanaAlertas() {
    * vuelve a pedir todo y queda lo que dice el servidor.
    */
   async function alternarLeida(a: Alerta) {
+    if (a.tipo !== "stock" || !a.producto_id) return;
     const proximo = !a.leida;
     setAlertas((prev) =>
       prev.map((x) => (x.producto_id === a.producto_id ? { ...x, leida: proximo } : x))
@@ -141,11 +149,11 @@ export default function CampanaAlertas() {
       {abierto && (
         <div className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_16px_40px_-12px_rgba(15,23,42,0.28)]">
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-            <p className="text-sm font-semibold text-slate-800">Reposición</p>
+            <p className="text-sm font-semibold text-slate-800">Avisos</p>
             {totalBajos > 0 && (
               <span className="text-[11px] text-slate-400">
                 {sinLeer === totalBajos
-                  ? `${totalBajos} ${totalBajos === 1 ? "producto" : "productos"}`
+                  ? `${totalBajos} ${totalBajos === 1 ? "aviso" : "avisos"}`
                   : `${sinLeer} sin leer de ${totalBajos}`}
               </span>
             )}
@@ -158,14 +166,14 @@ export default function CampanaAlertas() {
             </p>
           ) : totalBajos === 0 ? (
             <p className="py-8 text-center text-sm text-slate-400">
-              Ningún producto está por debajo de su mínimo.
+              Nada que atender: el stock está por encima del mínimo y ningún auto se atrasó.
             </p>
           ) : (
             <>
               <ul className="max-h-80 divide-y divide-slate-100 overflow-y-auto">
                 {alertas.map((a) => (
                   <li
-                    key={a.producto_id}
+                    key={claveAlerta(a)}
                     className={`flex items-start gap-1 transition-colors ${
                       a.leida ? "bg-slate-50/70" : "hover:bg-slate-50"
                     }`}
@@ -177,7 +185,13 @@ export default function CampanaAlertas() {
                         a.leida ? "opacity-50" : ""
                       }`}
                     >
-                      {a.nivel === "critico" ? (
+                      {a.tipo === "inactivo" ? (
+                        <CarFront
+                          className={`mt-0.5 h-4 w-4 shrink-0 ${
+                            a.nivel === "critico" ? "text-red-600" : "text-amber-500"
+                          }`}
+                        />
+                      ) : a.nivel === "critico" ? (
                         <PackageX className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
                       ) : (
                         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
@@ -195,7 +209,10 @@ export default function CampanaAlertas() {
                     </Link>
 
                     {/* Separado del enlace a proposito: tocar la alerta lleva al
-                        producto, y marcarla como vista es otra intencion. */}
+                        producto, y marcarla como vista es otra intencion.
+                        Las de vehiculo no se marcan: dejan de avisar cuando el
+                        auto vuelve, no cuando alguien las tilda. */}
+                    {a.tipo === "stock" && (
                     <button
                       type="button"
                       onClick={() => void alternarLeida(a)}
@@ -214,6 +231,7 @@ export default function CampanaAlertas() {
                     >
                       {a.leida ? <Undo2 className="h-4 w-4" /> : <Check className="h-4 w-4" />}
                     </button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -222,6 +240,18 @@ export default function CampanaAlertas() {
                 <p className="border-t border-slate-100 px-4 py-2 text-center text-[11px] text-slate-400">
                   Ya viste todo. Si el stock se mueve, vuelven a aparecer.
                 </p>
+              )}
+
+              {/* Los avisos de autos llevan a su propio listado, que ademas
+                  muestra a quien le toca por kilometraje. */}
+              {alertas.some((a) => a.tipo === "inactivo") && (
+                <Link
+                  href="/vehiculos/proximos-servicios"
+                  onClick={() => setAbierto(false)}
+                  className="block border-t border-slate-100 px-4 py-2.5 text-center text-xs font-semibold text-[#3F8E91] transition-colors hover:bg-slate-50"
+                >
+                  Ver los próximos servicios
+                </Link>
               )}
 
               <Link

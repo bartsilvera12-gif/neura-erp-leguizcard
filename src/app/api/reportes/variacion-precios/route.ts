@@ -55,9 +55,47 @@ export async function GET(request: NextRequest) {
       args
     );
 
+    // Precio y costo que el producto tiene HOY. El reporte muestra los de cada
+    // compra, que son historicos: para sugerir un precio hay que mirar el
+    // vigente, no el de la compra de hace tres meses.
+    const idsProd = [...new Set(rows.map((r: Record<string, unknown>) => String(r.producto_id)))];
+    const vigente = new Map<string, { precio: number; costo: number }>();
+    if (idsProd.length) {
+      const tP = quoteSchemaTable(schema, "productos");
+      const pv = await pool.query(
+        `SELECT id::text AS id, COALESCE(precio_venta,0)::float8 AS precio,
+                COALESCE(costo_promedio,0)::float8 AS costo
+           FROM ${tP} WHERE empresa_id = $1::uuid AND id = ANY($2::uuid[])`,
+        [empresaId, idsProd]
+      );
+      for (const p of pv.rows as Record<string, unknown>[]) {
+        vigente.set(String(p.id), { precio: n(p.precio), costo: n(p.costo) });
+      }
+    }
+
+    /** Precio que mantiene el margen `margenPct` con el costo dado. */
+    function precioParaMargen(costo: number, margenPct: number): number | null {
+      if (!(costo > 0)) return null;
+      const m = margenPct / 100;
+      // Un margen de 100% o mas sobre el precio es imposible de sostener: el
+      // precio tenderia a infinito.
+      if (!(m < 0.99)) return null;
+      const exacto = costo / (1 - m);
+      // Para arriba, a los 500: redondear para abajo dejaria el margen por
+      // debajo del que se quiso mantener.
+      return Math.ceil(exacto / 500) * 500;
+    }
+
     const items = rows.map((r: Record<string, unknown>) => {
       const costoAnt = n(r.costo_ant), costoAct = n(r.costo_act);
       const precioAnt = n(r.precio_ant), precioAct = n(r.precio_act);
+      const hoyProd = vigente.get(String(r.producto_id)) ?? null;
+      // Margen sobre el PRECIO (no sobre el costo): es como se lee "gano 30%".
+      const margenAnt = precioAnt > 0 ? ((precioAnt - costoAnt) / precioAnt) * 100 : null;
+      const margenHoy =
+        hoyProd && hoyProd.precio > 0
+          ? ((hoyProd.precio - hoyProd.costo) / hoyProd.precio) * 100
+          : null;
       return {
         producto_id: String(r.producto_id ?? ""),
         producto_nombre: String(r.producto_nombre ?? ""),
@@ -71,6 +109,17 @@ export async function GET(request: NextRequest) {
         precio_ant: precioAnt, precio_act: precioAct,
         precio_var_monto: precioAct - precioAnt,
         precio_var_pct: precioAnt > 0 ? ((precioAct - precioAnt) / precioAnt) * 100 : null,
+        // ── Margen y sugerencia ──────────────────────────────────────────
+        margen_ant_pct: margenAnt,
+        margen_hoy_pct: margenHoy,
+        precio_hoy: hoyProd?.precio ?? null,
+        costo_hoy: hoyProd?.costo ?? null,
+        // Solo se sugiere si el margen efectivamente se achico: subir el
+        // precio de algo que no perdio margen no es "mantener el margen".
+        precio_sugerido:
+          margenAnt != null && margenHoy != null && margenHoy < margenAnt - 0.5 && hoyProd
+            ? precioParaMargen(hoyProd.costo, margenAnt)
+            : null,
       };
     });
 

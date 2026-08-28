@@ -16,6 +16,14 @@ interface Row {
   proveedor_nombre: string; usuario_nombre: string | null;
   costo_ant: number; costo_act: number; costo_var_monto: number; costo_var_pct: number | null;
   precio_ant: number; precio_act: number; precio_var_monto: number; precio_var_pct: number | null;
+  /** Margen sobre el precio, antes del cambio y hoy. */
+  margen_ant_pct: number | null;
+  margen_hoy_pct: number | null;
+  /** Precio y costo vigentes del producto (no los de esta compra). */
+  precio_hoy: number | null;
+  costo_hoy: number | null;
+  /** Que cobrar para volver al margen de antes. null = no perdio margen. */
+  precio_sugerido: number | null;
 }
 
 function gs(v: number) { return `Gs. ${Math.round(v || 0).toLocaleString("es-PY")}`; }
@@ -37,6 +45,9 @@ export default function ReporteVariacionPreciosPage() {
   const [prodFiltro, setProdFiltro] = useState("");
   const [items, setItems] = useState<Row[]>([]);
   const [cargando, setCargando] = useState(false);
+  /** Producto cuyo precio se esta actualizando. */
+  const [aplicando, setAplicando] = useState<string | null>(null);
+  const [avisoPrecio, setAvisoPrecio] = useState<string | null>(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -56,9 +67,40 @@ export default function ReporteVariacionPreciosPage() {
 
   const pag1 = usePaginacion(filtrados);
 
+  /**
+   * Lleva el precio del producto al sugerido. Se recarga el reporte despues:
+   * el margen de esa fila cambia y el boton tiene que desaparecer solo.
+   */
+  async function aplicarPrecio(r: Row) {
+    if (!r.precio_sugerido) return;
+    setAplicando(r.producto_id);
+    setAvisoPrecio(null);
+    try {
+      const res = await fetch(`/api/productos/${r.producto_id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ precio_venta: r.precio_sugerido }),
+      });
+      if (!res.ok) throw new Error();
+      setAvisoPrecio(`${r.producto_nombre}: precio actualizado a ${gs(r.precio_sugerido)}.`);
+      await cargar();
+    } catch {
+      setAvisoPrecio("No se pudo actualizar el precio.");
+    } finally {
+      setAplicando(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Zentra · Reportes" title="Variación de precios" description="Productos que cambiaron de costo y/o precio de venta al recibir compras: anterior vs actual, variación y quién recibió." backHref="/reportes" backLabel="Reportes" />
+      <PageHeader eyebrow="Zentra · Reportes" title="Variación de precios" description="Cuando el proveedor sube el costo, acá se ve cuánto margen se perdió y qué cobrar para recuperarlo." backHref="/reportes" backLabel="Reportes" />
+
+      {avisoPrecio && (
+        <p className="rounded-xl border border-[#4FAEB2]/40 bg-[#4FAEB2]/5 px-4 py-2.5 text-sm text-[#357C80]">
+          {avisoPrecio}
+        </p>
+      )}
 
       <div className="rounded-2xl border-2 border-[#4FAEB2]/20 bg-white p-5 shadow-[0_2px_10px_-2px_rgba(79,174,178,0.12)] space-y-4">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -104,6 +146,8 @@ export default function ReporteVariacionPreciosPage() {
                   <th className="px-3 py-3 text-right font-semibold">P. venta ant.</th>
                   <th className="px-3 py-3 text-right font-semibold">P. venta act.</th>
                   <th className="px-3 py-3 text-right font-semibold">Δ Venta</th>
+                  <th className="px-3 py-3 text-right font-semibold">Margen</th>
+                  <th className="px-3 py-3 text-right font-semibold">Sugerido</th>
                   <th className="px-4 py-3 font-semibold">Recibió</th>
                 </tr>
               </thead>
@@ -121,6 +165,41 @@ export default function ReporteVariacionPreciosPage() {
                     <td className="px-3 py-2.5 text-right tabular-nums text-slate-500">{gs(r.precio_ant)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-slate-900">{gs(r.precio_act)}</td>
                     <td className="px-3 py-2.5 text-right"><Pct v={r.precio_var_pct} /></td>
+                    {/* Margen: el de antes contra el de hoy. Si se achico, se
+                        ve en rojo — es plata que se dejo de ganar sin que nadie
+                        cambiara el precio. */}
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {r.margen_ant_pct == null || r.margen_hoy_pct == null ? (
+                        <span className="text-slate-300">—</span>
+                      ) : (
+                        <span className="whitespace-nowrap">
+                          <span className="text-slate-400">{r.margen_ant_pct.toFixed(0)}%</span>
+                          <span className="text-slate-300"> → </span>
+                          <span
+                            className={`font-semibold ${
+                              r.margen_hoy_pct < r.margen_ant_pct - 0.5 ? "text-red-600" : "text-slate-700"
+                            }`}
+                          >
+                            {r.margen_hoy_pct.toFixed(0)}%
+                          </span>
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      {r.precio_sugerido ? (
+                        <button
+                          type="button"
+                          onClick={() => void aplicarPrecio(r)}
+                          disabled={aplicando === r.producto_id}
+                          title={`Hoy está en ${gs(r.precio_hoy ?? 0)}. Con este precio vuelve al ${r.margen_ant_pct?.toFixed(0)}% de margen.`}
+                          className="whitespace-nowrap rounded-lg border border-[#4FAEB2] bg-[#4FAEB2]/5 px-2.5 py-1 text-xs font-semibold text-[#3F8E91] transition-colors hover:bg-[#4FAEB2]/15 disabled:opacity-50"
+                        >
+                          {aplicando === r.producto_id ? "Guardando…" : `Poner ${gs(r.precio_sugerido)}`}
+                        </button>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-2.5 text-slate-600">{r.usuario_nombre ? r.usuario_nombre.split("@")[0] : "—"}</td>
                   </tr>
                 ))}

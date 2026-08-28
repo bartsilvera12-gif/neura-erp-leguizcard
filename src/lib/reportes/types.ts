@@ -176,12 +176,20 @@ export interface ConciliacionMovRow {
   referencia: string | null;   // N° de comprobante
   titular: string | null;
   monto: number;
+  /** Lo que retiene la entidad segun su comision. 0 si no tiene cargada. */
+  comision: number;
+  /** monto - comision: lo que realmente va a entrar a la cuenta. */
+  neto: number;
   estado: "pendiente" | "aprobado" | "rechazado";
 }
 
 export interface ConciliacionReporte {
   mes: string;
   totalCobrado: number;          // SUM(monto) de movimientos bancarios (no efectivo)
+  /** Lo que retienen las entidades sobre ese total. */
+  totalComision: number;
+  /** totalCobrado - totalComision: lo que se espera que entre a la cuenta. */
+  totalNeto: number;
   cantidadOperaciones: number;   // cantidad de movimientos
   porMetodo: ConciliacionAgrupado[];
   porEntidad: ConciliacionAgrupado[];

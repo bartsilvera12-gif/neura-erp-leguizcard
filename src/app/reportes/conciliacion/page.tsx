@@ -75,7 +75,13 @@ export default function ConciliacionReportePage() {
 
   const cuentaEstado = (e: string) => movs.filter((m) => m.estado === e).length;
 
-  const pag1 = usePaginacion(movs);
+  /** Filtro por entidad: con Bancard interesa mirar debito y credito por separado. */
+  const [entidadFiltro, setEntidadFiltro] = useState<string>("");
+
+  const movsFiltrados = entidadFiltro
+    ? movs.filter((m) => (m.entidad ?? "—") === entidadFiltro)
+    : movs;
+  const pag1 = usePaginacion(movsFiltrados);
 
   return (
     <div className="space-y-8">
@@ -101,11 +107,12 @@ export default function ConciliacionReportePage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <StatCard compact label="Total a conciliar" value={formatGs(data.totalCobrado)} accent hint="transferencia + tarjeta" />
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            <StatCard compact label="Total cobrado" value={formatGs(data.totalCobrado)} accent hint="transferencia + tarjeta" />
+            <StatCard compact label="Comisiones" value={formatGs(data.totalComision)} hint="lo que retiene la entidad" />
+            <StatCard compact label="Debería entrar" value={formatGs(data.totalNeto)} hint="cobrado − comisiones" />
             <StatCard compact label="Pendientes" value={String(cuentaEstado("pendiente"))} hint="por aprobar/rechazar" />
             <StatCard compact label="Aprobados" value={String(cuentaEstado("aprobado"))} />
-            <StatCard compact label="Rechazados" value={String(cuentaEstado("rechazado"))} />
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2">
@@ -166,12 +173,31 @@ export default function ConciliacionReportePage() {
 
           {/* Movimientos del mes con conciliación (aprobar / rechazar) */}
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
-            <h2 className="text-base font-semibold text-slate-800 mb-4">Movimientos del mes</h2>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-base font-semibold text-slate-800">Movimientos del mes</h2>
+              {data.porEntidad.length > 1 && (
+                <label className="flex items-center gap-2 text-xs text-slate-500">
+                  Entidad
+                  <select
+                    value={entidadFiltro}
+                    onChange={(e) => setEntidadFiltro(e.target.value)}
+                    className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-[#4FAEB2]"
+                  >
+                    <option value="">Todas</option>
+                    {data.porEntidad.map((e) => (
+                      <option key={e.clave} value={e.clave}>
+                        {e.clave} ({e.cantidad})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
             {movs.length === 0 ? (
               <p className="text-sm text-slate-400">No hay cobros por transferencia o tarjeta en el período.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1000px] text-left text-sm">
+                <table className="w-full min-w-[1180px] text-left text-sm">
                   <thead>
                     <tr className="border-b text-slate-500">
                       <th className="py-2.5 pr-4 font-medium">Fecha</th>
@@ -180,6 +206,8 @@ export default function ConciliacionReportePage() {
                       <th className="py-2.5 pr-4 font-medium">Banco / entidad</th>
                       <th className="py-2.5 pr-4 font-medium">Titular</th>
                       <th className="py-2.5 pr-4 font-medium text-right">Monto</th>
+                      <th className="py-2.5 pr-4 font-medium text-right">Comisión</th>
+                      <th className="py-2.5 pr-4 font-medium text-right">Neto</th>
                       <th className="py-2.5 pr-4 font-medium">N° Comprobante</th>
                       <th className="py-2.5 pr-4 font-medium">Estado</th>
                       <th className="py-2.5 font-medium text-right">Acción</th>
@@ -198,7 +226,11 @@ export default function ConciliacionReportePage() {
                           {m.entidad ?? "—"}
                         </td>
                         <td className="py-3 pr-4 text-slate-600">{m.titular ?? "—"}</td>
-                        <td className="py-3 pr-4 text-right tabular-nums font-semibold text-slate-800">{formatGs(m.monto)}</td>
+                        <td className="py-3 pr-4 text-right tabular-nums text-slate-600">{formatGs(m.monto)}</td>
+                        <td className="py-3 pr-4 text-right tabular-nums text-xs text-amber-700">
+                          {m.comision > 0 ? `− ${formatGs(m.comision)}` : "—"}
+                        </td>
+                        <td className="py-3 pr-4 text-right tabular-nums font-semibold text-slate-800">{formatGs(m.neto)}</td>
                         <td className="py-3 pr-4 font-mono text-xs text-slate-500">{m.referencia ?? "—"}</td>
                         <td className="py-3 pr-4">
                           <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${ESTADO_BADGE[m.estado]}`}>{ESTADO_LBL[m.estado]}</span>

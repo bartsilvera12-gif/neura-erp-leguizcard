@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getVehiculos } from "@/lib/vehiculos/storage";
+import type { Vehiculo } from "@/lib/vehiculos/types";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { FileText, ArrowLeft, Plus, Trash2, Loader2, Search, ImageIcon } from "lucide-react";
@@ -86,6 +88,14 @@ export default function NuevoPresupuestoPage() {
 
   // Cliente
   const [clienteId, setClienteId] = useState("");
+  // El auto cotizado. Vacío = productos sueltos, sin auto.
+  const [vehiculoId, setVehiculoId] = useState("");
+  const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
+
+  useEffect(() => {
+    // Si falla, el presupuesto se arma igual: el auto es opcional.
+    getVehiculos({ soloActivos: true }).then(setVehiculos).catch(() => setVehiculos([]));
+  }, []);
   const [clienteNombre, setClienteNombre] = useState("");
   const [clienteRuc, setClienteRuc] = useState("");
   const [clienteTel, setClienteTel] = useState("");
@@ -301,6 +311,7 @@ export default function NuevoPresupuestoPage() {
           cliente_ruc: clienteRuc.trim() || null,
           cliente_telefono: clienteTel.trim() || null,
           cliente_direccion: clienteDir.trim() || null,
+          vehiculo_id: vehiculoId || null,
           moneda: "PYG",
           condicion,
           validez_dias: validezDias.trim() === "" ? null : parseInt(validezDias, 10),
@@ -370,6 +381,29 @@ export default function NuevoPresupuestoPage() {
           <div>
             <label className={labelClass}>Teléfono</label>
             <input value={clienteTel} onChange={(e) => setClienteTel(e.target.value)} className={inputClass} />
+          </div>
+          <div className="sm:col-span-2">
+            <label className={labelClass}>Vehículo (opcional)</label>
+            <select
+              value={vehiculoId}
+              onChange={(e) => setVehiculoId(e.target.value)}
+              className={`${inputClass} bg-white`}
+            >
+              <option value="">— Sin vehículo (productos sueltos) —</option>
+              {(clienteId ? vehiculos.filter((v) => v.cliente_id === clienteId) : vehiculos).map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.patente}
+                  {[v.marca, v.modelo].filter(Boolean).length
+                    ? ` · ${[v.marca, v.modelo].filter(Boolean).join(" ")}`
+                    : ""}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-slate-400">
+              {clienteId
+                ? "Se muestran los autos de este cliente."
+                : "Elegí primero un cliente para ver solo sus autos."}
+            </p>
           </div>
           <div className="sm:col-span-2">
             <label className={labelClass}>Dirección</label>

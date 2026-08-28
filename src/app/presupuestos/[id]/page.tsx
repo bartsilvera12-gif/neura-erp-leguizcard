@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { FileText, ArrowLeft, Loader2, Download, FileCheck2 } from "lucide-react";
+import { FileText, ArrowLeft, Loader2, Download, FileCheck2, CarFront } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { ESTADO_LABEL, type EstadoPresupuesto } from "@/lib/presupuestos/types";
 
@@ -14,6 +14,7 @@ type Presu = {
   cliente_ruc: string | null;
   cliente_telefono: string | null;
   cliente_direccion: string | null;
+  vehiculo_id: string | null;
   estado: EstadoPresupuesto;
   moneda: string;
   subtotal: number | string;
@@ -81,6 +82,9 @@ export default function PresupuestoDetallePage() {
   const [busy, setBusy] = useState(false);
   const [ok, setOk] = useState<string | null>(null);
 
+  /** Patente + descripción del auto cotizado. null = el presupuesto no tiene. */
+  const [vehiculo, setVehiculo] = useState<string | null>(null);
+
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
@@ -90,8 +94,27 @@ export default function PresupuestoDetallePage() {
         setError(body?.error ?? "No se pudo cargar el presupuesto.");
         return;
       }
-      setPresu(body.data.presupuesto as Presu);
+      const p = body.data.presupuesto as Presu;
+      setPresu(p);
       setItems((body.data.items ?? []) as ItemRow[]);
+
+      // La patente se resuelve aparte: el presupuesto guarda solo el id, y
+      // mostrar un uuid no le dice nada a nadie. Si falla, no se muestra.
+      if (p.vehiculo_id) {
+        try {
+          const rv = await fetchWithSupabaseSession(`/api/vehiculos/${p.vehiculo_id}`, { cache: "no-store" });
+          const jv = await rv.json();
+          const v = jv?.data?.vehiculo as { patente?: string; marca?: string | null; modelo?: string | null } | undefined;
+          if (v?.patente) {
+            const desc = [v.marca, v.modelo].filter(Boolean).join(" ").trim();
+            setVehiculo(desc ? `${v.patente} · ${desc}` : v.patente);
+          }
+        } catch {
+          setVehiculo(null);
+        }
+      } else {
+        setVehiculo(null);
+      }
     } catch {
       setError("Error de red.");
     } finally {
@@ -270,6 +293,12 @@ export default function PresupuestoDetallePage() {
               {presu.cliente_ruc && <p>RUC / CI: {presu.cliente_ruc}</p>}
               {presu.cliente_telefono && <p>Tel: {presu.cliente_telefono}</p>}
               {presu.cliente_direccion && <p>{presu.cliente_direccion}</p>}
+              {vehiculo && (
+                <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
+                  <CarFront className="h-3.5 w-3.5 text-slate-400" />
+                  {vehiculo}
+                </p>
+              )}
             </div>
           </div>
           <div className="bg-white px-6 py-5">

@@ -57,6 +57,27 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
     /* fallback a EMPRESA_DOC */
   }
 
+  // Patente y descripcion del auto. Si falla, el PDF sale sin el: no vale
+  // tirar el presupuesto entero por una linea de encabezado.
+  let vehiculoTexto: string | null = null;
+  if (p.vehiculo_id) {
+    try {
+      const vq = await ctx.supabase
+        .from("vehiculos")
+        .select("patente, marca, modelo")
+        .eq("empresa_id", ctx.auth.empresa_id)
+        .eq("id", String(p.vehiculo_id))
+        .maybeSingle();
+      const v = vq.data as Record<string, unknown> | null;
+      if (v) {
+        const desc = [v.marca, v.modelo].filter(Boolean).join(" ").trim();
+        vehiculoTexto = desc ? `${String(v.patente)} · ${desc}` : String(v.patente);
+      }
+    } catch {
+      /* sin vehiculo en el encabezado */
+    }
+  }
+
   const data: PresupuestoPdfData = {
     numero_control: String(p.numero_control ?? ""),
     fecha: String(p.fecha ?? ""),
@@ -73,6 +94,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
       telefono: p.cliente_telefono ? String(p.cliente_telefono) : null,
       direccion: p.cliente_direccion ? String(p.cliente_direccion) : null,
     },
+    vehiculo: vehiculoTexto,
     items: itemsRaw.map((it) => ({
       producto_nombre: String(it.producto_nombre ?? ""),
       sku: it.sku ? String(it.sku) : null,

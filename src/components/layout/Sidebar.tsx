@@ -101,10 +101,7 @@ const MENU_STRUCTURE: MenuItem[] = [
     { label: "Productos", href: "/inventario" },
     { label: "Movimientos", href: "/inventario/movimientos" },
     { label: "Categorías", href: "/inventario/categorias" },
-    // "Depósitos / Ubicaciones" OCULTO (pedido del negocio: una sola sucursal, se
-    // trabaja con el depósito original y nada más). Para reactivar: descomentar
-    // esta línea y quitar el guard de src/app/inventario/ubicaciones/page.tsx.
-    // { label: "Depósitos / Ubicaciones", href: "/inventario/ubicaciones" },
+    { label: "Depósitos / Ubicaciones", href: "/inventario/ubicaciones" },
   ]},
   { key: "clientes", slug: "clientes", label: "Clientes", href: "/clientes", icon: Users },
   // Gestión Clientes OCULTA de la interfaz (pedido del negocio: de mas para un

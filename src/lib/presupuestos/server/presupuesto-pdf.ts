@@ -35,6 +35,8 @@ export interface PresupuestoPdfData {
   plazo_entrega: string | null;
   observaciones: string | null;
   cliente: { nombre: string; ruc: string | null; telefono: string | null; direccion: string | null };
+  /** Auto cotizado, si el presupuesto es para uno. */
+  vehiculo: string | null;
   items: Array<{
     producto_nombre: string;
     sku: string | null;
@@ -235,9 +237,10 @@ export async function buildPresupuestoPdf(
   c.page.drawText("DETALLES", { x: rx, y: boxTop, size: 7.5, font: bold, color: ACENTO });
   c.page.drawRectangle({ x: rx, y: boxTop - 5, width: colW, height: 0.8, color: GRIS_CLARO });
   let ry = boxTop - 20;
-  const det: Array<[string, string]> = [
-    ["Moneda", moneda === "USD" ? "Dólares (USD)" : "Guaraníes (PYG)"],
-  ];
+  const det: Array<[string, string]> = [];
+  // Primero el auto: en un lubricentro es el dato que identifica el trabajo.
+  if (data.vehiculo) det.push(["Vehículo", data.vehiculo]);
+  det.push(["Moneda", moneda === "USD" ? "Dólares (USD)" : "Guaraníes (PYG)"]);
   if (data.validez_dias != null) det.push(["Validez", `${data.validez_dias} día(s)`]);
   if (data.forma_pago) det.push(["Forma de pago", data.forma_pago]);
   if (data.plazo_entrega) det.push(["Plazo de entrega", data.plazo_entrega]);

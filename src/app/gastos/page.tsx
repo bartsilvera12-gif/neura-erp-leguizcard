@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import { getGastos, deleteGasto } from "@/lib/gastos/actions";
 import type { Gasto } from "@/lib/gastos/actions";
 
@@ -33,6 +34,27 @@ export default function GastosPage() {
   const [gastos, setGastos] = useState<Gasto[]>([]);
   const [cargando, setCargando] = useState(true);
   const [eliminando, setEliminando] = useState<string | null>(null);
+  // Periodo a mirar y a exportar. Vacio = todo.
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+
+  // Lo que se ve y lo que se baja tienen que ser lo mismo.
+  const visibles = gastos.filter((g) => {
+    const f = String(g.fecha ?? "").slice(0, 10);
+    if (desde && f < desde) return false;
+    if (hasta && f > hasta) return false;
+    return true;
+  });
+
+  const totalVisible = visibles.reduce((s, g) => s + (Number(g.monto) || 0), 0);
+
+  const urlExport = (() => {
+    const p = new URLSearchParams();
+    if (desde) p.set("desde", desde);
+    if (hasta) p.set("hasta", hasta);
+    const qs = p.toString();
+    return `/api/gastos/export${qs ? `?${qs}` : ""}`;
+  })();
 
   useEffect(() => {
     getGastos()
@@ -71,19 +93,57 @@ export default function GastosPage() {
           <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">Gastos operativos</h1>
           <p className="mt-0.5 text-xs text-slate-500">Registro de gastos de la empresa</p>
         </div>
-        <Link
-          href="/gastos/nuevo"
-          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-[#4FAEB2]/25 transition-colors hover:bg-[#3F8E91] active:scale-95"
-        >
-          <span>+</span>
-          Nuevo gasto
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          <ExportExcelButton url={urlExport} label="Exportar" />
+          <Link
+            href="/gastos/nuevo"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-[#4FAEB2]/25 transition-colors hover:bg-[#3F8E91] active:scale-95"
+          >
+            <span>+</span>
+            Nuevo gasto
+          </Link>
+        </div>
+      </div>
+
+      {/* Periodo. Vacío = todo, que es lo que necesita el cierre de año. */}
+      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <label className="text-[11px] font-medium text-slate-500">
+          Desde
+          <input
+            type="date"
+            value={desde}
+            onChange={(e) => setDesde(e.target.value)}
+            className="mt-1 block h-9 rounded-lg border border-slate-200 px-2 text-sm text-slate-700 outline-none focus:border-[#4FAEB2]"
+          />
+        </label>
+        <label className="text-[11px] font-medium text-slate-500">
+          Hasta
+          <input
+            type="date"
+            value={hasta}
+            onChange={(e) => setHasta(e.target.value)}
+            className="mt-1 block h-9 rounded-lg border border-slate-200 px-2 text-sm text-slate-700 outline-none focus:border-[#4FAEB2]"
+          />
+        </label>
+        {(desde || hasta) && (
+          <button
+            type="button"
+            onClick={() => { setDesde(""); setHasta(""); }}
+            className="h-9 rounded-lg border border-slate-200 px-3 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-50"
+          >
+            Limpiar
+          </button>
+        )}
+        <span className="ml-auto text-xs text-slate-500">
+          {visibles.length} {visibles.length === 1 ? "gasto" : "gastos"} ·{" "}
+          <strong className="tabular-nums text-slate-800">{formatGs(totalVisible)}</strong>
+        </span>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm ring-1 ring-[#4FAEB2]/15">
         {cargando ? (
           <div className="py-16 text-center text-gray-400 text-sm animate-pulse">Cargando gastos…</div>
-        ) : gastos.length === 0 ? (
+        ) : visibles.length === 0 ? (
           <div className="py-16 text-center text-gray-400">
             <p className="text-4xl mb-3">📋</p>
             <p className="font-medium text-gray-600">No hay gastos registrados</p>
@@ -107,7 +167,7 @@ export default function GastosPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {gastos.map((g) => (
+              {visibles.map((g) => (
                 <tr key={g.id} className="hover:bg-[#4FAEB2]/[0.04] transition-colors">
                   <td className="px-5 py-3.5 text-sm text-gray-600">{formatFecha(g.fecha)}</td>
                   <td className="px-5 py-3.5 text-sm font-medium text-gray-800">{g.categoria || "—"}</td>

@@ -6,7 +6,7 @@ import { API_ERRORS } from "@/lib/api/errors";
 import { crearPresupuesto, type PresupuestoItemInput } from "@/lib/presupuestos/server/presupuestos-pg";
 
 const PRESU_COLS =
-  "id, cliente_id, cliente_nombre, cliente_ruc, cliente_telefono, cliente_direccion, " +
+  "id, cliente_id, cliente_nombre, cliente_ruc, cliente_telefono, cliente_direccion, vehiculo_id, " +
   "numero_control, estado, moneda, subtotal, monto_iva, descuento_total, total, validez_dias, " +
   "fecha, fecha_vencimiento, condicion, forma_pago, plazo_entrega, observaciones, " +
   "convertido_pedido_id, convertido_venta_id, created_at, updated_at";

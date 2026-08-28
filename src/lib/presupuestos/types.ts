@@ -53,6 +53,11 @@ export interface Presupuesto {
   cliente_ruc: string | null;
   cliente_telefono: string | null;
   cliente_direccion: string | null;
+  /** Auto cotizado. null = productos sueltos, sin auto. */
+  vehiculo_id: string | null;
+  /** Patente y descripcion, resueltas al leer. Solo lectura. */
+  vehiculo_patente?: string | null;
+  vehiculo_desc?: string | null;
   numero_control: string;
   estado: EstadoPresupuesto;
   moneda: string;

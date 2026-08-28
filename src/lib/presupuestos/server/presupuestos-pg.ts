@@ -24,6 +24,8 @@ export interface CrearPresupuestoInput {
   cliente_ruc: string | null;
   cliente_telefono: string | null;
   cliente_direccion: string | null;
+  /** Auto cotizado. null = productos sueltos. */
+  vehiculo_id?: string | null;
   moneda: string;
   validez_dias: number | null;
   condicion: CondicionPresupuesto;
@@ -220,6 +222,7 @@ export async function crearPresupuesto(
       cliente_ruc: input.cliente_ruc?.trim() || null,
       cliente_telefono: input.cliente_telefono?.trim() || null,
       cliente_direccion: input.cliente_direccion?.trim() || null,
+      vehiculo_id: input.vehiculo_id || null,
       numero_control: numero,
       estado: "creado",
       moneda: input.moneda || "PYG",
@@ -364,6 +367,7 @@ export async function convertirEnPedido(
         cliente_ruc: p.cliente_ruc,
         cliente_telefono: p.cliente_telefono,
         cliente_direccion: p.cliente_direccion,
+        vehiculo_id: p.vehiculo_id ?? null,
         forma_pago: p.forma_pago,
         plazo_entrega: p.plazo_entrega,
         observaciones: p.observaciones,

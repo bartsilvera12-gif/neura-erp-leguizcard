@@ -129,9 +129,60 @@ export default function PresupuestoDetallePage() {
     }
   }
 
+  /** Modo edicion de precios: cambios pendientes por id de item. */
+  const [editando, setEditando] = useState(false);
+  const [cambios, setCambios] = useState<Record<string, { precio_unitario?: number; cantidad?: number }>>({});
+
+  function corregir(itemId: string, campo: "precio_unitario" | "cantidad", valor: string) {
+    const n = Number(valor.replace(",", "."));
+    setCambios((prev) => ({
+      ...prev,
+      [itemId]: { ...prev[itemId], [campo]: Number.isFinite(n) && n >= 0 ? n : undefined },
+    }));
+  }
+
+  function cancelarEdicion() {
+    setCambios({});
+    setEditando(false);
+    setError(null);
+  }
+
+  async function guardarPrecios() {
+    const lista = Object.entries(cambios)
+      .map(([id, c]) => ({ id, ...c }))
+      .filter((c) => c.precio_unitario !== undefined || c.cantidad !== undefined);
+    if (!lista.length) {
+      cancelarEdicion();
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setOk(null);
+    try {
+      const res = await fetchWithSupabaseSession(`/api/presupuestos/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: lista }),
+      });
+      const body = await res.json();
+      if (!res.ok || body?.success === false) {
+        setError(body?.error ?? "No se pudieron guardar los precios.");
+        return;
+      }
+      setOk("Precios actualizados.");
+      setCambios({});
+      setEditando(false);
+      await cargar();
+    } catch {
+      setError("Error de red al guardar los precios.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function convertir() {
     if (busy) return;
-    if (!confirm("¿Crear un pedido desde este presupuesto? No se descuenta stock ni se genera venta.")) return;
+    if (!confirm("¿Pasar este presupuesto a caja? Queda en Ventas → Pedidos pendientes, listo para cobrar. Todavía no descuenta stock: eso pasa al registrar la venta.")) return;
     setBusy(true);
     setError(null);
     setOk(null);
@@ -139,13 +190,13 @@ export default function PresupuestoDetallePage() {
       const res = await fetchWithSupabaseSession(`/api/presupuestos/${id}/convertir`, { method: "POST" });
       const body = await res.json();
       if (!res.ok || body?.success === false) {
-        setError(body?.error ?? "No se pudo crear el pedido.");
+        setError(body?.error ?? "No se pudo pasar el presupuesto a caja.");
         return;
       }
-      setOk("Pedido creado correctamente.");
+      setOk("Listo. Está en Ventas → Pedidos pendientes, para cobrarlo.");
       await cargar();
     } catch {
-      setError("Error de red al crear el pedido.");
+      setError("Error de red al pasar el presupuesto a caja.");
     } finally {
       setBusy(false);
     }
@@ -253,8 +304,38 @@ export default function PresupuestoDetallePage() {
                     <span className="font-medium text-slate-800">{it.producto_nombre}</span>
                     {it.sku ? <span className="text-xs text-slate-400"> · {it.sku}</span> : null}
                   </td>
-                  <td className="px-4 py-3 text-center tabular-nums text-slate-600">{Number(it.cantidad).toLocaleString("es-PY")} {it.unidad_medida ?? ""}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtGs(it.precio_unitario, presu.moneda)}</td>
+                  <td className="px-4 py-3 text-center tabular-nums text-slate-600">
+                    {editando ? (
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        defaultValue={Number(it.cantidad)}
+                        onChange={(e) => corregir(String(it.id), "cantidad", e.target.value)}
+                        className="h-8 w-20 rounded-md border border-slate-200 px-2 text-right text-sm tabular-nums outline-none focus:border-[#4FAEB2]"
+                        aria-label={`Cantidad de ${it.producto_nombre}`}
+                      />
+                    ) : (
+                      <>
+                        {Number(it.cantidad).toLocaleString("es-PY")} {it.unidad_medida ?? ""}
+                      </>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-slate-600">
+                    {editando ? (
+                      <input
+                        type="number"
+                        min={0}
+                        step="1"
+                        defaultValue={Number(it.precio_unitario)}
+                        onChange={(e) => corregir(String(it.id), "precio_unitario", e.target.value)}
+                        className="h-8 w-28 rounded-md border border-slate-200 px-2 text-right text-sm tabular-nums outline-none focus:border-[#4FAEB2]"
+                        aria-label={`Precio de ${it.producto_nombre}`}
+                      />
+                    ) : (
+                      fmtGs(it.precio_unitario, presu.moneda)
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-center text-slate-500">{it.iva_tipo}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-500">{Number(it.descuento) > 0 ? fmtGs(it.descuento, presu.moneda) : "—"}</td>
                   <td className="py-3 pl-4 pr-6 text-right font-semibold tabular-nums text-slate-900">{fmtGs(it.total, presu.moneda)}</td>
@@ -307,9 +388,39 @@ export default function PresupuestoDetallePage() {
                 Marcar como {ESTADO_LABEL[s]}
               </button>
             ))}
+            {/* Los precios se mueven entre que se cotiza y el cliente contesta.
+                Un presupuesto ya pasado a caja no se toca: el pedido diria una
+                cosa y el presupuesto otra. */}
+            {presu.estado !== "convertido" &&
+              (editando ? (
+                <>
+                  <button
+                    onClick={guardarPrecios}
+                    disabled={busy}
+                    className="rounded-lg bg-[#4FAEB2] px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-[#3F8E91] disabled:opacity-50"
+                  >
+                    Guardar precios
+                  </button>
+                  <button
+                    onClick={cancelarEdicion}
+                    disabled={busy}
+                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setEditando(true)}
+                  disabled={busy}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Corregir precios
+                </button>
+              ))}
             {presu.estado === "aprobado" && (
               <button onClick={convertir} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg bg-[#4FAEB2] px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-[#3F8E91] disabled:opacity-50">
-                <FileCheck2 className="h-4 w-4" /> Crear pedido
+                <FileCheck2 className="h-4 w-4" /> Pasar a caja
               </button>
             )}
           </div>

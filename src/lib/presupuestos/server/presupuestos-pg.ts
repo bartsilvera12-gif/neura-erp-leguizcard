@@ -56,6 +56,101 @@ export function calcularItem(it: PresupuestoItemInput) {
   };
 }
 
+/**
+ * Corrige precio, cantidad y descuento de los items de un presupuesto, y
+ * recalcula sus totales.
+ *
+ * Solo toca los items que llegan, por id: lo que no viene queda como estaba.
+ * Un presupuesto ya convertido no se toca — cambiarle el precio despues de
+ * haberlo pasado a caja dejaria el pedido diciendo una cosa y el presupuesto
+ * otra.
+ */
+export async function actualizarItemsPresupuesto(
+  sb: AppSupabaseClient,
+  empresaId: string,
+  presupuestoId: string,
+  cambios: { id: string; precio_unitario?: number; cantidad?: number; descuento?: number }[]
+): Promise<void> {
+  const pq = await sb
+    .from("presupuestos")
+    .select("estado")
+    .eq("empresa_id", empresaId)
+    .eq("id", presupuestoId)
+    .maybeSingle();
+  if (pq.error) throw new Error(pq.error.message);
+  if (!pq.data) throw new Error("Presupuesto no encontrado.");
+  if ((pq.data as { estado: string }).estado === "convertido") {
+    throw new Error("El presupuesto ya pasó a caja: no se pueden cambiar sus precios.");
+  }
+
+  const itq = await sb
+    .from("presupuesto_items")
+    .select("id, cantidad, precio_unitario, descuento, iva_tipo")
+    .eq("empresa_id", empresaId)
+    .eq("presupuesto_id", presupuestoId);
+  if (itq.error) throw new Error(itq.error.message);
+  const items = (itq.data ?? []) as unknown as Record<string, unknown>[];
+  if (!items.length) throw new Error("El presupuesto no tiene ítems.");
+
+  const porId = new Map(cambios.map((c) => [c.id, c]));
+
+  let subtotal = 0;
+  let montoIva = 0;
+  let total = 0;
+  let descuentoTotal = 0;
+
+  for (const it of items) {
+    const id = String(it.id);
+    const c = porId.get(id);
+    const calc = calcularItem({
+      producto_id: "",
+      producto_nombre: "",
+      sku: null,
+      unidad_medida: null,
+      cantidad: c?.cantidad ?? Number(it.cantidad),
+      precio_unitario: c?.precio_unitario ?? Number(it.precio_unitario),
+      descuento: c?.descuento ?? Number(it.descuento),
+      iva_tipo: it.iva_tipo as PresupuestoItemInput["iva_tipo"],
+    });
+
+    subtotal += calc.subtotal;
+    montoIva += calc.monto_iva;
+    total += calc.total;
+    descuentoTotal += calc.descuento;
+
+    // Solo se escribe lo que cambio: un UPDATE por item que no se toco es
+    // ruido en la base y en cualquier auditoria futura.
+    if (!c) continue;
+    const upd = await sb
+      .from("presupuesto_items")
+      .update({
+        cantidad: calc.cantidad,
+        precio_unitario: calc.precio_unitario,
+        descuento: calc.descuento,
+        subtotal: calc.subtotal,
+        monto_iva: calc.monto_iva,
+        total: calc.total,
+      })
+      .eq("empresa_id", empresaId)
+      .eq("presupuesto_id", presupuestoId)
+      .eq("id", id);
+    if (upd.error) throw new Error(upd.error.message);
+  }
+
+  const updP = await sb
+    .from("presupuestos")
+    .update({
+      subtotal: round2(subtotal),
+      monto_iva: round2(montoIva),
+      total: round2(total),
+      descuento_total: round2(descuentoTotal),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("empresa_id", empresaId)
+    .eq("id", presupuestoId);
+  if (updP.error) throw new Error(updP.error.message);
+}
+
 /** Próximo número de control PRE-XXXXXX (best-effort, puede haber carrera multi-usuario). */
 export async function siguienteNumeroControl(
   sb: AppSupabaseClient,
@@ -279,6 +374,11 @@ export async function convertirEnPedido(
         source: "presupuesto",
         presupuesto_id: presupuestoId,
         numero_presupuesto: p.numero_control,
+        // Con esto el pedido cae en la cola de caja (Ventas > Pedidos
+        // pendientes), que es la que lo abre en el carrito para cobrarlo.
+        // Sin esta marca el pedido se creaba y no lo veia nadie: el
+        // presupuesto aprobado quedaba a mitad de camino.
+        facturacion_estado: "pendiente_caja",
       },
     })
     .select("id")

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { actualizarItemsPresupuesto } from "@/lib/presupuestos/server/presupuestos-pg";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
@@ -59,6 +60,43 @@ export async function PATCH(request: NextRequest, ctxParams: { params: Promise<{
       body = (await request.json()) as Record<string, unknown>;
     } catch {
       return NextResponse.json(errorResponse("JSON inválido."), { status: 400 });
+    }
+
+    // Correccion de precios/cantidades. Va antes del cambio de estado porque
+    // son dos operaciones distintas sobre el mismo recurso: se manda `items` o
+    // se manda `estado`, no las dos cosas.
+    if (Array.isArray(body.items)) {
+      const cambios = (body.items as Record<string, unknown>[])
+        .map((x) => ({
+          id: String(x.id ?? ""),
+          precio_unitario: x.precio_unitario == null ? undefined : Number(x.precio_unitario),
+          cantidad: x.cantidad == null ? undefined : Number(x.cantidad),
+          descuento: x.descuento == null ? undefined : Number(x.descuento),
+        }))
+        .filter(
+          (c) =>
+            c.id &&
+            (c.precio_unitario === undefined || (Number.isFinite(c.precio_unitario) && c.precio_unitario >= 0)) &&
+            (c.cantidad === undefined || (Number.isFinite(c.cantidad) && c.cantidad > 0)) &&
+            (c.descuento === undefined || (Number.isFinite(c.descuento) && c.descuento >= 0))
+        );
+      if (!cambios.length) {
+        return NextResponse.json(errorResponse("No hay cambios válidos que aplicar."), { status: 400 });
+      }
+      try {
+        await actualizarItemsPresupuesto(ctx.supabase, ctx.auth.empresa_id, id, cambios);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "No se pudo actualizar el presupuesto.";
+        return NextResponse.json(errorResponse(msg), { status: /convertido|pasó a caja/i.test(msg) ? 409 : 400 });
+      }
+      const rec = await ctx.supabase
+        .from("presupuestos")
+        .select(PRESU_COLS)
+        .eq("empresa_id", ctx.auth.empresa_id)
+        .eq("id", id)
+        .maybeSingle();
+      if (rec.error) throw new Error(rec.error.message);
+      return NextResponse.json(successResponse({ presupuesto: rec.data }));
     }
 
     const nuevoEstado = body.estado as EstadoPresupuesto | undefined;

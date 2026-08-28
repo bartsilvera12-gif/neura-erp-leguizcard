@@ -13,6 +13,7 @@ import type { MetodoValuacion } from "@/lib/inventario/types";
 import ProductoBuscadorInline from "@/components/inventario/ProductoBuscadorInline";
 import { productoMatchesQuery } from "@/lib/productos/token-search";
 import { parseCantidad, pasoCantidad, permiteDecimales } from "@/lib/productos/unidades";
+import CantidadInput from "@/components/ui/CantidadInput";
 import { FancySelect } from "@/components/ui/FancySelect";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -634,20 +635,13 @@ export default function NuevaCompraPage() {
                         </td>
                         <td className="py-2 px-3">
                           <div className="flex items-center justify-end gap-1.5">
-                            <input
-                              type="number"
-                              min={0}
-                              step={pasoCantidad(l.unidad_medida)}
-                              inputMode={permiteDecimales(l.unidad_medida) ? "decimal" : "numeric"}
-                              value={l.cantidad || ""}
-                              onChange={(e) => {
-                                const n = parseCantidad(e.target.value, l.unidad_medida);
-                                editarLinea(i, { cantidad: n ?? 0 });
-                              }}
-                              onBlur={(e) => {
-                                const n = parseCantidad(e.target.value, l.unidad_medida);
-                                editarLinea(i, { cantidad: n && n > 0 ? n : 0 });
-                              }}
+                            {/* El mismo input que en Ventas: acepta coma o
+                                punto y muestra la cantidad sin ceros de relleno. */}
+                            <CantidadInput
+                              value={l.cantidad}
+                              unidad={l.unidad_medida}
+                              onChange={(n) => editarLinea(i, { cantidad: n })}
+                              ariaLabel={`Cantidad de ${l.producto_nombre}`}
                               className={`rounded-md border border-slate-200 px-2 py-1.5 text-right text-sm outline-none focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20 ${
                                 permiteDecimales(l.unidad_medida) ? "w-24" : "w-16"
                               }`}

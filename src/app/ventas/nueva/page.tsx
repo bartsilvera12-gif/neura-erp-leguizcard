@@ -2138,7 +2138,10 @@ export default function NuevaVentaPage() {
                         {([
                           { v: "efectivo", label: "Efectivo" },
                           { v: "transferencia", label: "Transferencia" },
-                          { v: "tarjeta", label: "Tarjeta/Débito" },
+                          // "Tarjeta" cubre el POS: el debito y el credito se
+                          // distinguen por la ENTIDAD que se elige al cobrar,
+                          // que es de donde sale la comision de Bancard.
+                          { v: "tarjeta", label: "Tarjeta / POS" },
                           { v: "mixto", label: "Mixto" },
                         ] as { v: MetodoPago; label: string }[]).map((m) => (
                           <button
@@ -2409,7 +2412,7 @@ export default function NuevaVentaPage() {
 
             <div>
               <label className="block text-xs text-gray-600 mb-1">
-                {metodoPago === "tarjeta" ? "Entidad / banco / POS" : "Entidad / banco"}
+                {metodoPago === "tarjeta" ? "POS / tarjeta — elegí débito o crédito" : "Entidad / banco"}
               </label>
               <input
                 type="text"

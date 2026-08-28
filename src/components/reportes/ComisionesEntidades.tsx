@@ -103,6 +103,27 @@ export default function ComisionesEntidades({ onCambio }: { onCambio?: () => voi
     }
   }
 
+  /** Activa o da de baja una entidad. Las de baja no se ofrecen al cobrar. */
+  async function alternarActiva(e: Entidad) {
+    setGuardando(e.id);
+    setError(null);
+    try {
+      const r = await fetchWithSupabaseSession("/api/entidades-bancarias", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: e.id, activo: !e.activo }),
+      });
+      if (!r.ok) throw new Error();
+      setEntidades((prev) => prev.map((x) => (x.id === e.id ? { ...x, activo: !e.activo } : x)));
+      onCambio?.();
+    } catch {
+      setError("No se pudo cambiar el estado de la entidad.");
+      void cargar();
+    } finally {
+      setGuardando(null);
+    }
+  }
+
   async function crear() {
     const nombre = nuevoNombre.trim();
     if (!nombre) {
@@ -203,6 +224,14 @@ export default function ComisionesEntidades({ onCambio }: { onCambio?: () => voi
                     ) : (
                       <span className="w-3.5" />
                     )}
+                    <button
+                      type="button"
+                      onClick={() => void alternarActiva(e)}
+                      className="rounded-md border border-slate-200 px-2 py-1 text-[10px] font-medium text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700"
+                      title={e.activo ? "No ofrecerla al cobrar" : "Volver a ofrecerla al cobrar"}
+                    >
+                      {e.activo ? "Dar de baja" : "Activar"}
+                    </button>
                   </div>
                 </li>
               ))}

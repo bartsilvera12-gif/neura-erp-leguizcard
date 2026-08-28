@@ -94,9 +94,14 @@ export function clampCantidad(n: number, unidad?: string | null): number {
 /** Muestra la cantidad sin decimales sobrantes: 2 y no "2.00". */
 export function formatCantidad(n: number, unidad?: string | null): string {
   if (!Number.isFinite(n)) return "0";
-  return permiteDecimales(unidad)
-    ? String(redondearCantidad(n, unidad))
-    : String(Math.round(n));
+  if (!permiteDecimales(unidad)) return String(Math.round(n));
+  // Coma decimal, y sin ceros de relleno: "1" y no "1,000"; "0,5" y no "0,500".
+  // String(n) daba el punto de JavaScript, que acá se lee como separador de
+  // miles y hace dudar de la cantidad.
+  return redondearCantidad(n, unidad).toLocaleString("es-PY", {
+    maximumFractionDigits: decimalesCantidad(unidad),
+    useGrouping: false,
+  });
 }
 
 /**

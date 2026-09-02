@@ -436,7 +436,6 @@ export default function NuevoProductoPage() {
               {([
                 { v: "reventa", t: "Reventa", d: "Se compra y se revende" },
                 { v: "repuesto", t: "Repuesto", d: "Se consume en reparaciones" },
-                { v: "servicio", t: "Servicio", d: "Mano de obra, sin stock" },
               ] as const).map((o) => {
                 const on = form.tipo_producto === o.v;
                 return (

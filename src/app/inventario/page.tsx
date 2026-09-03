@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Image as ImageIcon } from "lucide-react";
+import { Image as ImageIcon, Barcode } from "lucide-react";
 import { getProductos, deleteProducto } from "@/lib/inventario/storage";
 import type { Producto, MetodoValuacion } from "@/lib/inventario/types";
 import ExportExcelButton from "@/components/ui/ExportExcelButton";
@@ -12,12 +12,6 @@ import { useIsAdmin } from "@/lib/auth/use-is-admin";
 
 const inputFilterClass =
   "border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-[#0EA5E9] focus:outline-none";
-
-const metodoBadge: Record<MetodoValuacion, string> = {
-  CPP: "bg-blue-100 text-blue-700",
-  FIFO: "bg-green-100 text-green-700",
-  LIFO: "bg-purple-100 text-purple-700",
-};
 
 function formatGs(valor: number) {
   return `Gs. ${valor.toLocaleString("es-PY")}`;
@@ -132,11 +126,13 @@ export default function InventarioPage() {
   }
 
   const productos = todos.filter((p) => {
-    // Búsqueda inteligente: cada palabra debe aparecer en el nombre o el SKU.
-    // Sin acentos y sin importar el orden ("35 aspir" encuentra "Aspiradora … 35 litros").
+    // Búsqueda inteligente: cada palabra debe aparecer en el nombre, el SKU o el
+    // código de barras. Sin acentos y sin importar el orden ("35 aspir" encuentra
+    // "Aspiradora … 35 litros"). Un escaneo de código de barras entra como un solo
+    // término y matchea de forma exacta contra el código guardado.
     const términos = foldText(busqueda).split(/\s+/).filter(Boolean);
     if (términos.length > 0) {
-      const heno = `${foldText(p.nombre)} ${foldText(p.sku ?? "")}`;
+      const heno = `${foldText(p.nombre)} ${foldText(p.sku ?? "")} ${foldText(p.codigo_barras ?? "")}`;
       if (!términos.every((t) => heno.includes(t))) return false;
     }
 
@@ -301,7 +297,7 @@ export default function InventarioPage() {
               </svg>
               <input
                 type="text"
-                placeholder="Nombre o SKU… (ej: «compresor 100» o «INS-0006»)"
+                placeholder="Nombre, SKU o código de barras… (escaneá o escribí)"
                 value={busqueda}
                 onChange={(e) => { setBusqueda(e.target.value); setPagina(1); }}
                 className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-8 text-sm outline-none focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20"
@@ -509,13 +505,19 @@ export default function InventarioPage() {
                   </span>
                 </th>
                 <th className="py-2.5 pr-4 text-right font-semibold">Stock</th>
-                <th className="py-2.5 pr-4 text-center font-semibold">Valuación</th>
                 <th className="w-32 py-2.5 pl-4 pr-4 text-right font-semibold">Acción</th>
               </tr>
             </thead>
 
             <tbody>
-              {productosPagina.map((p) => {
+              {cargandoLista && (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-sm text-slate-400">
+                    Cargando productos…
+                  </td>
+                </tr>
+              )}
+              {!cargandoLista && productosPagina.map((p) => {
                 const stockBajo = p.stock_actual <= p.stock_minimo;
                 const sinStock = p.stock_actual <= 0;
                 const margen = calcularMargenVenta(p.costo_promedio, p.precio_venta);
@@ -529,7 +531,7 @@ export default function InventarioPage() {
                         <ProductoThumb url={p.imagen_url} alt={p.nombre} />
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="font-medium leading-snug text-gray-800">{p.nombre}</span>
+                            <span className="font-medium leading-snug text-slate-900">{p.nombre}</span>
                             {(() => {
                               const v = p.es_vendible !== false;
                               const i = p.es_insumo === true;
@@ -539,7 +541,15 @@ export default function InventarioPage() {
                               return null;
                             })()}
                           </div>
-                          <p className="font-mono text-[11px] text-slate-400">{p.sku}</p>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 font-mono text-[11px] text-slate-400">
+                            <span>{p.sku}</span>
+                            {p.codigo_barras && (
+                              <span className="inline-flex items-center gap-1 text-slate-400" title="Código de barras">
+                                <Barcode className="h-3 w-3" />
+                                {p.codigo_barras}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -569,16 +579,17 @@ export default function InventarioPage() {
                     </td>
                     {/* Stock + unidad + mínimo, agrupados en una sola columna */}
                     <td className="py-3 pr-4 text-right">
-                      <span className={`text-sm font-semibold tabular-nums ${sinStock ? "text-red-600" : stockBajo ? "text-amber-600" : "text-gray-800"}`}>
-                        {p.stock_actual}
-                      </span>
-                      <span className="ml-1 text-[11px] uppercase text-slate-400">{p.unidad_medida}</span>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <span
+                          aria-hidden="true"
+                          className={`inline-block h-1.5 w-1.5 rounded-full ${sinStock ? "bg-red-500" : stockBajo ? "bg-amber-500" : "bg-emerald-500"}`}
+                        />
+                        <span className={`text-sm font-semibold tabular-nums ${sinStock ? "text-red-600" : stockBajo ? "text-amber-600" : "text-slate-800"}`}>
+                          {p.stock_actual}
+                        </span>
+                        <span className="text-[11px] uppercase text-slate-400">{p.unidad_medida}</span>
+                      </div>
                       <p className="text-[11px] text-slate-400">mín. {p.stock_minimo}</p>
-                    </td>
-                    <td className="py-3 pr-4 text-center">
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${metodoBadge[p.metodo_valuacion]}`}>
-                        {p.metodo_valuacion}
-                      </span>
                     </td>
                     <td className="py-3 pl-4 pr-4 text-right">
                       <div className="inline-flex items-center gap-2">
@@ -604,7 +615,7 @@ export default function InventarioPage() {
               {/* Sin resultados: antes la tabla quedaba en blanco, sin explicación. */}
               {!cargandoLista && productosPagina.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center">
+                  <td colSpan={6} className="py-12 text-center">
                     <p className="text-sm text-slate-500">
                       {todos.length === 0
                         ? "Todavía no cargaste productos."
